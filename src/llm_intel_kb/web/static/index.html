@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM 情报知识库</title>
+<style>
+:root {
+  --bg: #0d1117; --panel: #161b22; --panel2: #1c2129; --border: #2d333b;
+  --text: #e6edf3; --dim: #8b949e; --accent: #58a6ff; --accent2: #bc8cff;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922; --mono: 'Cascadia Code', Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px; }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+
+header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 10; }
+header h1 { font-size: 16px; font-weight: 600; }
+header h1 span { color: var(--accent); }
+#status-chips { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--dim); background: var(--panel2); }
+.chip.ok { color: var(--green); border-color: rgba(63,185,80,.4); }
+.chip.warn { color: var(--yellow); border-color: rgba(210,153,34,.4); }
+
+nav { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+nav button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--dim); padding: 10px 16px; font-size: 14px; cursor: pointer; }
+nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+nav button:hover { color: var(--text); }
+
+main { max-width: 1080px; margin: 0 auto; padding: 24px; }
+.tab { display: none; } .tab.active { display: block; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.panel h3 { font-size: 13px; color: var(--dim); font-weight: 600; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+/* 问答 */
+#ask-form { display: flex; gap: 8px; margin-bottom: 12px; }
+#question { flex: 1; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; }
+#question:focus { border-color: var(--accent); }
+select { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; color: var(--text); }
+.btn { background: #238636; border: none; color: #fff; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer; }
+.btn:hover { background: #2ea043; } .btn:disabled { opacity: .5; cursor: wait; }
+.btn.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+.btn.ghost:hover { border-color: var(--accent); }
+.btn.danger { background: #da3633; }
+#ask-hint { font-size: 12px; color: var(--dim); margin-bottom: 16px; }
+#answer-box { white-space: pre-wrap; line-height: 1.7; font-size: 14px; }
+#answer-meta { font-size: 12px; color: var(--dim); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.cite { display: inline-block; background: rgba(88,166,255,.15); color: var(--accent); border-radius: 4px; padding: 0 5px; font-size: 12px; font-family: var(--mono); margin: 0 1px; }
+
+.hit { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; background: var(--panel2); }
+.hit-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; }
+.hit-n { font-family: var(--mono); color: var(--accent); font-weight: 700; }
+.hit-title { font-weight: 600; font-size: 13px; }
+.hit-src { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.hit-text { font-size: 13px; color: var(--dim); line-height: 1.6; }
+
+/* 表格 */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:hover td { background: rgba(88,166,255,.04); }
+td.num { font-family: var(--mono); text-align: right; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; }
+.badge.green { background: rgba(63,185,80,.15); color: var(--green); }
+.badge.red { background: rgba(248,81,73,.15); color: var(--red); }
+.badge.gray { background: var(--panel2); color: var(--dim); }
+.badge.purple { background: rgba(188,140,255,.15); color: var(--accent2); }
+
+/* 指标卡 */
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.metric .v { font-size: 24px; font-weight: 700; font-family: var(--mono); }
+.metric .l { font-size: 12px; color: var(--dim); margin-top: 4px; }
+.metric.good .v { color: var(--green); } .metric.bad .v { color: var(--red); }
+
+/* 弹窗 */
+#modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; }
+#modal-bg.open { display: flex; align-items: center; justify-content: center; }
+#modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; width: min(860px, 92vw); max-height: 84vh; overflow: auto; padding: 20px; }
+#modal h2 { font-size: 16px; margin-bottom: 6px; padding-right: 40px; }
+#modal .close { position: absolute; top: 16px; right: 20px; background: none; border: none; color: var(--dim); font-size: 20px; cursor: pointer; }
+#modal .meta { font-size: 12px; color: var(--dim); margin-bottom: 14px; font-family: var(--mono); }
+#modal pre { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 14px; white-space: pre-wrap; font-size: 12.5px; line-height: 1.7; font-family: var(--mono); }
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar input[type=text] { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); outline: none; }
+.toolbar input[type=text]:focus { border-color: var(--accent); }
+.toolbar .spacer { flex: 1; }
+.pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.pager .info { color: var(--dim); font-size: 12px; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--dim); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { color: var(--dim); text-align: center; padding: 40px 0; }
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 18px; z-index: 200; display: none; }
+.note { font-size: 12px; color: var(--dim); line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 LLM <span>情报知识库</span></h1>
+  <div id="status-chips"></div>
+</header>
+<nav>
+  <button data-tab="ask" class="active">💬 问答</button>
+  <button data-tab="corpus">📚 语料库</button>
+  <button data-tab="snapshots">🕘 版本历史</button>
+  <button data-tab="eval">📊 质量评估</button>
+</nav>
+
+<main>
+  <!-- 问答 -->
+  <section id="tab-ask" class="tab active">
+    <div class="panel">
+      <form id="ask-form">
+        <input id="question" type="text" placeholder="问点什么，比如：vLLM 最近有什么值得关注的更新？" autocomplete="off">
+        <select id="provider-select"><option value="">默认模型</option></select>
+        <button class="btn" id="ask-btn" type="submit">提问</button>
+      </form>
+      <div id="ask-hint">回答基于当前索引的检索结果，标注 [n] 引用；回答下方列出全部来源。</div>
+    </div>
+    <div id="ask-result"></div>
+  </section>
+
+  <!-- 语料库 -->
+  <section id="tab-corpus" class="tab">
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="corpus-q" placeholder="按标题 / 正文 / 来源过滤…" style="width: 320px">
+        <button class="btn ghost" id="corpus-refresh">刷新</button>
+        <span class="spacer"></span>
+        <span class="note" id="corpus-count"></span>
+      </div>
+      <div style="overflow-x: auto"><table id="corpus-table">
+        <thead><tr><th>标题</th><th>来源</th><th style="text-align:right">字符</th><th>语</th><th>摘要</th><th>发布时间</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="pager">
+        <button class="btn ghost" id="corpus-prev">上一页</button>
+        <button class="btn ghost" id="corpus-next">下一页</button>
+        <span class="info" id="corpus-page"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 版本 -->
+  <section id="tab-snapshots" class="tab">
+    <div class="panel">
+      <h3>数据集版本线（快照不可变，可随时回滚）</h3>
+      <table id="snapshot-table">
+        <thead><tr><th>快照</th><th>创建时间</th><th>父版本</th><th style="text-align:right">总量</th><th style="text-align:right">新增</th><th>状态</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="note" style="margin-top: 12px">回滚只切换「当前版本」指针，不删除任何文档；回滚后需在 CLI 执行 index build 重建检索索引。</p>
+    </div>
+  </section>
+
+  <!-- 评估 -->
+  <section id="tab-eval" class="tab">
+    <div id="eval-content"><div class="empty">加载中…</div></div>
+  </section>
+</main>
+
+<div id="modal-bg"><div id="modal">
+  <button class="close" onclick="closeModal()">✕</button>
+  <h2 id="modal-title"></h2>
+  <div class="meta" id="modal-meta"></div>
+  <pre id="modal-body"></pre>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ---------- Tab 切换 ----------
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    $('#tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'corpus') loadCorpus();
+    if (btn.dataset.tab === 'snapshots') loadSnapshots();
+    if (btn.dataset.tab === 'eval') loadEval();
+  };
+});
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2600);
+}
+
+// ---------- 状态 ----------
+async function loadStatus() {
+  try {
+    const st = await (await fetch('/api/status')).json();
+    const chips = [];
+    chips.push(st.snapshot.id
+      ? `<span class="chip ok">快照 ${st.snapshot.id} · ${st.snapshot.docs} 篇</span>`
+      : `<span class="chip warn">无快照（先 data fetch + commit）</span>`);
+    if (st.index_ready) {
+      const vec = st.index.embedding_model ? `向量 ${st.index.embedding_dim} 维` : '纯词法';
+      chips.push(`<span class="chip ok">索引 ${st.index.chunks} 块 · ${vec}</span>`);
+      if (st.index.snapshot_id !== st.snapshot.id)
+        chips.push(`<span class="chip warn">索引落后于快照，建议 index build</span>`);
+    } else {
+      chips.push(`<span class="chip warn">无索引（CLI: index build）</span>`);
+    }
+    for (const p of st.providers)
+      chips.push(`<span class="chip ${p.ready ? 'ok' : 'warn'}">${esc(p.name)}${p.local ? ' · 本地' : ''}</span>`);
+    $('#status-chips').innerHTML = chips.join('');
+
+    const ps = await (await fetch('/api/providers')).json();
+    $('#provider-select').innerHTML = '<option value="">默认模型</option>' +
+      ps.chat.map(p => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(p.model)}${p.local ? '（本地）' : ''}</option>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+// ---------- 问答 ----------
+$('#ask-form').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#question').value.trim();
+  if (!q) return;
+  const btn = $('#ask-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>思考中';
+  $('#ask-result').innerHTML = '<div class="panel"><span class="spinner"></span>检索中…（本地模型可能需要 1-2 分钟）</div>';
+  try {
+    const resp = await fetch('/api/ask', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q, k: 5, provider: $('#provider-select').value || null})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '请求失败');
+    renderAnswer(q, data);
+  } catch (err) {
+    $('#ask-result').innerHTML = `<div class="panel"><span style="color: var(--red)">✗ ${esc(err.message)}</span></div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '提问';
+  }
+};
+
+function renderAnswer(q, data) {
+  const answer = esc(data.answer).replace(/\[(\d+)\]/g, '<span class="cite">$1</span>');
+  const hits = data.hits.map(h => `
+    <div class="hit">
+      <div class="hit-head">
+        <span class="hit-n">[${h.n}]</span>
+        <span class="hit-title">${esc(h.title)}</span>
+        <span class="hit-src">${esc(h.source_id)}${h.lexical_rank ? ' · 词法#' + h.lexical_rank : ''}${h.vector_rank ? ' · 向量#' + h.vector_rank : ''}</span>
+      </div>
+      <div class="hit-text">${esc(h.excerpt)}…</div>
+      <div class="hit-src" style="margin-top: 6px"><a href="${esc(h.url)}" target="_blank">${esc(h.url)}</a></div>
+    </div>`).join('');
+  $('#ask-result').innerHTML = `
+    <div class="panel">
+      <h3>回答</h3>
+      <div id="answer-box">${answer || '（空回复）'}</div>
+      <div id="answer-meta">模型 ${esc(data.provider)} · ${esc(data.model)} · ${data.latency_ms}ms · ${esc(data.mode)}</div>
+    </div>
+    <div class="panel">
+      <h3>引用来源（${data.hits.length} 条）</h3>
+      ${hits}
+    </div>`;
+}
+
+// ---------- 语料库 ----------
+let corpusPage = 1;
+async function loadCorpus() {
+  const q = $('#corpus-q').value.trim();
+  const tbody = $('#corpus-table tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
+  try {
+    const data = await (await fetch(`/api/corpus?q=${encodeURIComponent(q)}&page=${corpusPage}`)).json();
+    $('#corpus-count').textContent = `快照 ${data.snapshot_id || '-'} · 共 ${data.total} 篇`;
+    $('#corpus-page').textContent = `第 ${data.page} 页`;
+    if (!data.docs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无文档</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.docs.map(d => `
+      <tr data-id="${d.id}" style="cursor: pointer">
+        <td style="max-width: 380px">${esc(d.title)}</td>
+        <td><span class="badge gray">${esc(d.source_id)}</span></td>
+        <td class="num">${d.chars}</td>
+        <td>${d.language === 'zh' ? '中文' : 'EN'}</td>
+        <td style="max-width: 260px; color: var(--dim); font-size: 12px">${d.summary ? esc(d.summary).slice(0, 90) + '…' : '<span class="badge gray">未富化</span>'}</td>
+        <td style="white-space: nowrap; color: var(--dim); font-size: 12px">${esc((d.published_at || '').slice(0, 10))}</td>
+      </tr>`).join('');
+    tbody.querySelectorAll('tr').forEach(tr => tr.onclick = () => showDoc(tr.dataset.id));
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`; }
+}
+$('#corpus-refresh').onclick = () => { corpusPage = 1; loadCorpus(); };
+$('#corpus-q').onkeydown = e => { if (e.key === 'Enter') { corpusPage = 1; loadCorpus(); } };
+$('#corpus-prev').onclick = () => { if (corpusPage > 1) { corpusPage--; loadCorpus(); } };
+$('#corpus-next').onclick = () => { corpusPage++; loadCorpus(); };
+
+async function showDoc(id) {
+  try {
+    const d = await (await fetch('/api/corpus/' + id)).json();
+    $('#modal-title').textContent = d.title;
+    const enr = d.enrichment;
+    $('#modal-meta').innerHTML =
+      `${esc(d.source_id)} · <a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a> · ${d.chars} 字符 · ${d.language === 'zh' ? '中文' : '英文'}<br>` +
+      (d.published_at ? `发布 ${esc(d.published_at)} · ` : '') + `抓取 ${esc(d.fetched_at)}<br>` +
+      (enr ? `<span class="badge purple">摘要</span> ${esc(enr.summary)}<br><span class="badge purple">主题词</span> ${esc(enr.topics.join('、'))}` : '<span class="badge gray">未富化</span>');
+    $('#modal-body').textContent = d.content;
+    $('#modal-bg').classList.add('open');
+  } catch (e) { toast('加载失败：' + e.message); }
+}
+function closeModal() { $('#modal-bg').classList.remove('open'); }
+$('#modal-bg').onclick = e => { if (e.target.id === 'modal-bg') closeModal(); };
+
+// ---------- 版本 ----------
+async function loadSnapshots() {
+  const tbody = $('#snapshot-table tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="empty">加载中…</td></tr>';
+  try {
+    const data = await (await fetch('/api/snapshots')).json();
+    if (!data.snapshots.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">还没有快照（CLI: data fetch + data commit）</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.snapshots.map(s => `
+      <tr>
+        <td style="font-family: var(--mono)">${esc(s.id)}</td>
+        <td style="color: var(--dim)">${esc(s.created_at.replace('T', ' ').slice(0, 19))}</td>
+        <td style="font-family: var(--mono); color: var(--dim)">${esc(s.parent || '-')}</td>
+        <td class="num">${s.total}</td>
+        <td class="num">${s.added}</td>
+        <td>${s.current ? '<span class="badge green">当前</span>' : ''}</td>
+        <td>${s.current ? '' : `<button class="btn ghost" onclick="rollback('${esc(s.id)}')">回滚到此</button>`}</td>
+      </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`; }
+}
+async function rollback(id) {
+  if (!confirm(`回滚到快照 ${id}？回滚后需在 CLI 重建索引（index build）`)) return;
+  try {
+    await fetch('/api/snapshots/rollback', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({snapshot_id: id})
+    });
+    toast('已回滚到 ' + id);
+    loadSnapshots(); loadStatus();
+  } catch (e) { toast('回滚失败：' + e.message); }
+}
+
+// ---------- 评估 ----------
+async function loadEval() {
+  const el = $('#eval-content');
+  try {
+    const [latestResp, histResp] = await Promise.all([
+      fetch('/api/eval/latest'), fetch('/api/eval/history')
+    ]);
+    const data = await latestResp.json();
+    const hist = await histResp.json();
+    if (!data.report) {
+      el.innerHTML = '<div class="panel"><div class="empty">还没有评估报告<br><span class="note">CLI 执行：eval run（--no-llm 只评估检索层）</span></div></div>';
+      return;
+    }
+    const r = data.report;
+    const metric = (label, value, fmt, good) =>
+      `<div class="metric ${good ? 'good' : ''}"><div class="v">${fmt}</div><div class="l">${label}</div></div>`;
+    const entries = r.entries.map(e => `
+      <tr>
+        <td style="font-family: var(--mono); color: var(--dim)">${esc(e.qa_id)}</td>
+        <td>${esc(e.question)}</td>
+        <td>${e.hit ? '<span class="badge green">✓ 命中</span>' : '<span class="badge red">✗ 未命中</span>'}</td>
+        <td class="num">${e.first_hit_rank ?? '-'}</td>
+        <td class="num">${(e.keyword_coverage * 100).toFixed(0)}%</td>
+        <td class="num">${e.judge_score ?? '-'}</td>
+        <td>${e.passed ? '<span class="badge green">通过</span>' : '<span class="badge red">未过</span>'}</td>
+      </tr>`).join('');
+    el.innerHTML = `
+      <div class="metrics">
+        ${metric('检索命中率', r.retrieval_hit_rate, (r.retrieval_hit_rate*100).toFixed(0)+'%', r.retrieval_hit_rate >= 0.7)}
+        ${metric('MRR', r.mrr, r.mrr.toFixed(3), r.mrr >= 0.5)}
+        ${metric('通过率', r.pass_rate, (r.pass_rate*100).toFixed(0)+'%', r.pass_rate >= 0.8)}
+        ${metric('引用率', r.citation_rate, (r.citation_rate*100).toFixed(0)+'%')}
+        ${metric('关键词覆盖', r.keyword_coverage_avg, (r.keyword_coverage_avg*100).toFixed(0)+'%')}
+        ${metric('LLM 评分', r.judge_score_avg, r.judge_score_avg ? r.judge_score_avg.toFixed(2) : '-', r.judge_score_avg ? r.judge_score_avg >= 3.5 : null)}
+      </div>
+      ${renderTrend(hist.runs || [])}
+      ${renderModelCompare(hist.runs || [])}
+      <div class="panel">
+        <h3>逐条结果 · 快照 ${esc(r.snapshot_id)} · ${esc(r.retriever_mode)} · k=${r.k}${r.judge_model ? ' · judge ' + esc(r.judge_model) : ''}</h3>
+        <table>
+          <thead><tr><th>ID</th><th>问题</th><th>检索</th><th>首位</th><th>覆盖</th><th>评分</th><th>结论</th></tr></thead>
+          <tbody>${entries}</tbody>
+        </table>
+        <p class="note" style="margin-top: 12px">回归门禁：CLI 执行 eval gate 与基线对比，指标退化则以退出码 1 拦截；badcase 导出到 data/badcases/ 供人工复盘回流。</p>
+      </div>`;
+  } catch (e) { el.innerHTML = `<div class="panel"><div class="empty">${esc(e.message)}</div></div>`; }
+}
+
+// 指标趋势：纯 SVG 柱状对比（词法 → 混合检索的改进直接可视化）
+function renderTrend(runs) {
+  if (runs.length < 2) return '';
+  const shown = runs.slice(-8);
+  const W = Math.min(1040, 130 * shown.length + 40), H = 200, PAD = 34;
+  const bw = 44, gap = (W - PAD * 2 - bw * shown.length * 2) / Math.max(1, shown.length);
+  const scale = v => H - PAD - v * (H - PAD * 2);
+  const bars = [];
+  shown.forEach((run, i) => {
+    const x0 = PAD + i * (bw * 2 + gap);
+    const isVec = /^hybrid/i.test(run.retriever_mode || '');
+    const color = isVec ? 'var(--accent2)' : 'var(--accent)';
+    const hitH = (run.retrieval_hit_rate || 0) * (H - PAD * 2);
+    const mrrH = (run.mrr || 0) * (H - PAD * 2);
+    bars.push(`<g>
+      <rect x="${x0}" y="${scale(run.retrieval_hit_rate)}" width="${bw}" height="${hitH}" rx="3" fill="${color}" opacity=".85"/>
+      <rect x="${x0 + bw + 2}" y="${scale(run.mrr)}" width="${bw}" height="${mrrH}" rx="3" fill="var(--green)" opacity=".75"/>
+      <text x="${x0 + bw + 1}" y="${H - PAD + 14}" text-anchor="middle" font-size="10" fill="var(--dim)">${esc((run.created_at || '').slice(5, 10))}</text>
+      <text x="${x0 + bw + 1}" y="${H - 4}" text-anchor="middle" font-size="9.5" fill="${isVec ? 'var(--accent2)' : 'var(--accent)'}">${isVec ? '混合' : '词法'}</text>
+      <text x="${x0 + bw / 2}" y="${scale(run.retrieval_hit_rate) - 4}" text-anchor="middle" font-size="10" fill="${color}" font-family="var(--mono)">${((run.retrieval_hit_rate || 0) * 100).toFixed(0)}</text>
+      <text x="${x0 + bw * 1.5 + 2}" y="${scale(run.mrr) - 4}" text-anchor="middle" font-size="10" fill="var(--green)" font-family="var(--mono)">${(run.mrr || 0).toFixed(2)}</text>
+    </g>`);
+  });
+  return `<div class="panel">
+    <h3>指标趋势 · hit@k（蓝/紫柱）与 MRR（绿柱）× ${shown.length} 次评估</h3>
+    <div style="overflow-x: auto"><svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+      <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD / 2}" y2="${H - PAD}" stroke="var(--border)"/>
+      <line x1="${PAD}" y1="${scale(1)}" x2="${W - PAD / 2}" y2="${scale(1)}" stroke="var(--border)" stroke-dasharray="4 4" opacity=".5"/>
+      ${bars.join('')}
+    </svg></div>
+    <p class="note" style="margin-top: 8px">每根柱组 = 一次评估：左柱 hit@k（百分比标注）、右柱 MRR（0-1）。柱色区分检索模式——蓝=纯词法 BM25、紫=混合检索（BM25+向量 RRF）。检索模式升级与 badcase 修复的效果在这里直接可读。</p>
+  </div>`;
+}
+
+// 模型对比：同一金标集 × 不同生成模型（eval run -p <provider>），取各模型最新一次评估
+function renderModelCompare(runs) {
+  const byModel = {};
+  runs.forEach(run => { if (run.judge_model) byModel[run.judge_model] = run; });
+  const rows = Object.entries(byModel).filter(([, r]) => r.entry_count > 0);
+  if (rows.length < 2) return '';
+  const cols = [
+    ['hit@k', r => (r.retrieval_hit_rate * 100).toFixed(0) + '%', r => r.retrieval_hit_rate, true],
+    ['MRR', r => r.mrr.toFixed(3), r => r.mrr, true],
+    ['关键词覆盖', r => (r.keyword_coverage_avg * 100).toFixed(0) + '%', r => r.keyword_coverage_avg, true],
+    ['引用率', r => (r.citation_rate * 100).toFixed(0) + '%', r => r.citation_rate, true],
+    ['LLM 评分', r => r.judge_score_avg ? r.judge_score_avg.toFixed(2) : '-', r => r.judge_score_avg || 0, true],
+    ['通过率', r => (r.pass_rate * 100).toFixed(0) + '%', r => r.pass_rate, true],
+  ];
+  const header = cols.map(c => `<th>${c[0]}</th>`).join('');
+  const body = rows.map(([model, r]) => {
+    const mode = /^hybrid/i.test(r.retriever_mode || '') ? '混合' : '词法';
+    const cells = cols.map(([, fmt, val, higher]) => {
+      const best = Math.max(...rows.map(([, x]) => val(x)));
+      const isBest = val(r) === best && best > 0;
+      return `<td class="num" style="${isBest ? 'color: var(--green); font-weight: 600' : ''}">${fmt(r)}</td>`;
+    }).join('');
+    const tag = model.includes('qwen') ? '本地' : '远程';
+    return `<tr>
+      <td style="font-family: var(--mono)">${esc(model)} <span class="badge" style="background: var(--panel2); color: var(--dim)">${tag}</span></td>
+      <td>${mode}</td>
+      ${cells}
+      <td class="num">${r.entry_count}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="panel">
+    <h3>生成模型对比 · 同一金标集各模型最新一次评估</h3>
+    <table>
+      <thead><tr><th>生成模型</th><th>检索</th>${header}<th>题数</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="note" style="margin-top: 12px">检索层指标（hit@k / MRR）只取决于索引，各模型相同；生成层指标（引用率 / LLM 评分 / 通过率）体现模型差距——这正是 CLI「eval run -p &lt;provider&gt;」切换模型做对比的意义。</p>
+  </div>`;
+}
+
+loadStatus();
+</script>
+</body>
+</html>

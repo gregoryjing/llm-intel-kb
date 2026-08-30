@@ -1,0 +1,64 @@
+# 模型供应商配置 —— 每个 [名字] 段是一个供应商，doctor / compare 会全部识别
+#
+# kind:      chat（对话）/ embedding（向量化）/ both（两者都支持）
+# base_url:  OpenAI 兼容接口地址（远程 API 或本地服务均可）
+# api_key:   "env:环境变量名" 表示从环境变量读取（推荐，密钥不进 git）；
+#            本地服务（Ollama 等）不校验 Key，直接写占位符即可
+# model:     模型名
+
+# ---- 远程 API（去 https://platform.deepseek.com 注册获取 Key）----
+[deepseek]
+kind = "chat"
+base_url = "https://api.deepseek.com"
+api_key = "env:LLMKB_DEEPSEEK_API_KEY"
+model = "deepseek-chat"
+
+# ---- 远程 API（Anthropic Messages 格式，第三方网关）----
+# adapter = "anthropic" 走 /v1/messages（system 走顶层字段、x-api-key 认证），
+# 与 OpenAI 兼容接口的差异由 client 层的 _chat_anthropic 分支吸收。
+# dots3-note-prev 是思考型模型：不关思考时短回复的 max_tokens 会被思考 token
+# 耗尽导致正文为空（实测 100 token 全花在思考上）。skip_think = true 映射为
+# 官方开关 thinking={"type":"disabled"}，实测 0.4s 直出正文（开思考要 2.1s）。
+[dots3]
+kind = "chat"
+adapter = "anthropic"
+base_url = "https://note3-prev-api.askdiandian.com"
+api_key = "env:LLMKB_DOTS3_API_KEY"
+model = "dots3-note-prev"
+skip_think = true
+
+# ---- 本地模型（自动探测到的 Ollama，无需 Key、不花钱、断网可用）----
+# adapter = "ollama" 走原生接口。qwen3 系列是思考型模型：think=false 关不掉思考，
+# 思考会耗尽上下文窗口导致正文为空、且慢数倍。skip_think = true 通过预置空
+# <think> 块让模型直接输出正文（实测不再输出思考 token）。
+# num_ctx = 3072：8GB 显存（RTX 4070 Laptop）装不下 5.5GB 模型 + 6144 上下文
+# 的 KV 缓存 + bge-m3 向量模型——超出后 Ollama 把层卸载到内存，生成速度从
+# ~40 tok/s 塌到 0.6 tok/s（30 倍劣化，单次生成 600 秒超时）。3072 是实测
+# 显存内可容纳的最大上下文；配合 answer 层 5000 字符上下文上限正好够用。
+[local-ollama]
+kind = "chat"
+adapter = "ollama"
+base_url = "http://localhost:11434/v1"
+api_key = "ollama"
+model = "qwen3-vl:8b"
+skip_think = true
+num_ctx = 3072
+
+# ---- 本地向量模型（RAG 检索用；已执行 ollama pull bge-m3）----
+# 混合检索 = BM25 词法 + 向量语义，RRF 融合。中文查询 ↔ 英文论文的跨语言
+# 语义匹配正是词法检索的盲区（badcase g004 的根因），向量分支补上这块。
+# bge-m3 是多语言模型（中英语义对齐）：先试过 nomic-embed-text（英文模型），
+# 中文查询会"同语言扎堆"匹配中文标题党而不是语义相关的英文文档，实测换
+# bge-m3 后检索指标显著提升（见 data/evals/ 趋势）。
+[local-ollama-embedding]
+kind = "embedding"
+base_url = "http://localhost:11434/v1"
+api_key = "ollama"
+model = "bge-m3"
+
+# ---- 远程向量模型示例（追求更强中文语义时取消注释，需 SiliconFlow Key）----
+# [siliconflow-embedding]
+# kind = "embedding"
+# base_url = "https://api.siliconflow.cn/v1"
+# api_key = "env:LLMKB_SILICONFLOW_API_KEY"
+# model = "BAAI/bge-m3"

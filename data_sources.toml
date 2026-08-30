@@ -1,0 +1,116 @@
+# 数据源注册表 —— 每个段落是一个源，`llm-intel-kb data fetch` 会抓取 enabled = true 的源
+#
+# type:        rss（RSS/Atom 订阅）| github-releases（GitHub 发布日志）
+# url/repo:    对应类型的地址
+# max_items:   单次抓取条数上限（增量抓取，抓过的不重复入库）
+# min_chars:   清洗后正文最短字符数，低于则丢弃（过滤空壳公告）
+# enabled:     false = 保留配置但跳过（网络不可达 / 源失效时先禁用，不要删）
+#
+# 可达性探测（2026-08，probe_sources.py）：
+#   arXiv 三个分类、openai-news、qbitai、5 个 GitHub releases 可达；
+#   anthropic RSS 已 404，huggingface/deepmind 在当前网络超时 —— 均先禁用。
+
+# ---- 论文（arXiv API，Atom 订阅）----
+[arxiv-cs-ai]
+type = "rss"
+url = "https://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=15"
+title = "arXiv cs.AI 人工智能（最新）"
+max_items = 15
+min_chars = 300
+
+[arxiv-cs-cl]
+type = "rss"
+url = "https://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&max_results=15"
+title = "arXiv cs.CL 计算语言学（最新）"
+max_items = 15
+min_chars = 300
+
+[arxiv-cs-lg]
+type = "rss"
+url = "https://export.arxiv.org/api/query?search_query=cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=15"
+title = "arXiv cs.LG 机器学习（最新）"
+max_items = 15
+min_chars = 300
+
+# ---- 官方博客 / 新闻 ----
+# min_chars 分级说明（badcase g006/g007 复盘结论，2026-08-29）：
+# openai-news 的 RSS 只带 ~150 字快讯（全文页有 Cloudflare 403，无法抓取）。
+# 标题+快讯本身就是有效情报（"OpenAI 发布了什么"类问题的答案就是标题级信息），
+# 按「快讯级」源对待：门槛降到 120。
+[openai-news]
+type = "rss"
+url = "https://openai.com/news/rss.xml"
+title = "OpenAI 新闻"
+max_items = 15
+min_chars = 120
+
+# qbitai 的 RSS 连摘要都没有（summary 全空，正文页 403 反爬），只有标题。
+# 中文 AI 行业标题流对"行业动态"类查询有检索价值，按「标题级」源对待：门槛降到 5。
+# 注意：这类文档只能支撑标题级回答，不能指望正文细节。
+[qbitai]
+type = "rss"
+url = "https://www.qbitai.com/feed"
+title = "量子位（AI 资讯中文）"
+max_items = 15
+min_chars = 5
+
+# ---- 框架发布日志（GitHub Releases API）----
+[gh-langchain]
+type = "github-releases"
+repo = "langchain-ai/langchain"
+title = "LangChain 发布日志"
+max_items = 10
+min_chars = 200
+
+[gh-llamaindex]
+type = "github-releases"
+repo = "run-llama/llama_index"
+title = "LlamaIndex 发布日志"
+max_items = 10
+min_chars = 200
+
+[gh-vllm]
+type = "github-releases"
+repo = "vllm-project/vllm"
+title = "vLLM 发布日志"
+max_items = 10
+min_chars = 200
+
+[gh-ollama]
+type = "github-releases"
+repo = "ollama/ollama"
+title = "Ollama 发布日志"
+max_items = 10
+min_chars = 200
+
+[gh-transformers]
+type = "github-releases"
+repo = "huggingface/transformers"
+title = "Transformers 发布日志"
+max_items = 10
+min_chars = 200
+
+# ---- 以下源当前不可达，保留配置但禁用 ----
+[anthropic-news]
+type = "rss"
+url = "https://www.anthropic.com/rss.xml"
+title = "Anthropic 新闻"
+enabled = false
+
+[huggingface-blog]
+type = "rss"
+url = "https://huggingface.co/blog/feed.xml"
+title = "HuggingFace 博客"
+enabled = false
+
+[deepmind-blog]
+type = "rss"
+url = "https://deepmind.google/blog/rss.xml"
+title = "DeepMind 博客"
+enabled = false
+
+[jiqizhixin]
+type = "rss"
+url = "https://www.jiqizhixin.com/rss"
+title = "机器之心"
+enabled = false
