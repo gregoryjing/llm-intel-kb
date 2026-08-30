@@ -19,3 +19,7 @@ data/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 本地文档（不公开）
+HANDOFF.md
+USAGE.md
