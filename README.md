@@ -42,7 +42,7 @@
 | M2 | 服务面：结构感知切块 → 混合检索（BM25+向量 RRF）→ 引用生成 | ✅ 完成 |
 | M2+ | pgvector 可选后端（HNSW ANN，与本地文件索引接口对齐） | ✅ 完成 |
 | M3 | 评估面：金标集 → 自动评估 → 回归门禁 → badcase 回流 | ✅ 完成 |
-| M4 | 交付：Web UI（问答/语料/版本/评估）· 作品集文档 | ✅ 完成 |
+| M4 | 交付：Web UI（问答/语料/版本/评估） | ✅ 完成 |
 | M5 | 证据级评估（块级证据率/忠实度）· 领域守卫（规则+豁免+语义兜底+回归闭环） | ✅ 完成 |
 
 **真实数据验收**（2026-08-29，混合检索 BM25 + bge-m3；生成层对比本地 qwen3-vl:8b 与远程 dots3-note-prev）：
@@ -88,10 +88,6 @@ badcase 复盘沉淀的三条工程结论（详见 `data_sources.toml` 与 `llm_
    直接从 miss 变 rank-1。
 
 ## 快速开始
-
-> 📄 文档导航：现场演示与面试问答看 [docs/面试备战手册.md](docs/面试备战手册.md)；
-> 完整使用说明看 [USAGE.md](USAGE.md)；架构决策与历史踩坑看 [HANDOFF.md](HANDOFF.md)。
-> 历史设计文档归档在 `docs/archive/`。
 
 前置：Python 3.11+；模型服务（本地 Ollama 或远程 API 至少其一）；数据库可选（不用 pgvector 就跑本地文件索引）。
 
@@ -306,15 +302,12 @@ llm-intel-kb/
 │   └── checks.py          # doctor 体检项
 ├── tests/                 # unit（146 个）+ integration（DB/本地模型/API）
 ├── golden/                # qa.toml 金标问答集（100 条）· guard_cases.toml 守卫回归（12 条）
-├── docs/                  # 面试备战手册.md（演示流程+话术+问答）· archive/（历史设计文档）
 ├── data_sources.toml      # 数据源注册表（12 源，enabled 开关）
 ├── llm_providers.toml     # 模型供应商注册表
-├── USAGE.md               # 完整使用说明（从启动到日常使用）
-├── HANDOFF.md             # 架构决策与历史踩坑交接
 └── docker-compose.yml     # pgvector:pg16
 ```
 
-## 工程决策速览（作品集叙事）
+## 工程决策速览
 
 1. **内容哈希寻址，语料只增不删**——文档 ID = hash(标题+正文)，天然去重、不可变、可回溯；
    抓取失败的源不视为删除，防止网络抖动误删数据。
@@ -334,4 +327,4 @@ llm-intel-kb/
 
 ## License
 
-个人作品集项目，用于求职展示与学习交流。
+个人项目，用于学习交流。
