@@ -3,18 +3,35 @@
 # 每条 [[qa]]：
 #   id                唯一编号
 #   question          用户问题（贴近真实问法）
-#   expected_sources  期望命中的数据源 id（检索 top-k 内命中任一即 hit；留空 = 只要有检索结果）
+#   expected_sources  期望命中的数据源 id（检索 top-k 内命中任一即 hit；留空 = 负例）
 #   expected_keywords 回答中应出现的关键词（小写；用于生成层关键词覆盖率指标）
 #   notes             标注说明（可选）
+#   category          评估维度标签（可选）：concept/version/news/multihop/cross_lingual/negative/general
+#   timeliness        时效性标签（可选）：stable / time_sensitive
+#                     未填写时按问题中的时间线索词（"最近/最新/近期"…）自动推断；
+#                     time_sensitive 条目依赖语料新鲜度，会随时间陈旧化（stale eval 风险）。
 #
 # 维护方式：eval run 跑出的 badcase（data/badcases/*.jsonl）人工复盘后，
 # 确认是「系统应答对却没答对」的问题，就追加到这里 —— 这就是 badcase 回流。
+# Web 端「质量评估 → badcase 导入」或 CLI `eval import-badcase` 可直接导入。
+#
+# 治理政策（数据集生命周期）：
+#   1. 每季度对评估集做一次体检：`llm-intel-kb eval audit`（或 Web「质量评估」页）。
+#   2. 时效敏感条目按季度轮换约 30%：替换为新近的真实问题，或在 notes 记录时间锚点。
+#   3. 负例（expected_sources 为空）与「领域守卫」的禁止清单对齐——守卫在检索前拦截，
+#      负例在评估层验证「该拒答时确实拒答」，两者共同守住领域边界。
+#   4. expected_sources 必须取自 data_sources.toml 中 enabled 的源 id。引用未注册源
+#      （如从未启用的 arxiv-cs-cv / arxiv-cs-sd）会让该条 hit@k 恒为 0 —— 这是
+#      「评估集本身坏了」而非系统坏了，属于必须拦截的脏数据。
+#   5. category 标注评估维度（concept/version/news/multihop/cross_lingual/negative），
+#      便于按维度看指标，避免单一总分掩盖结构性短板。
 
 [[qa]]
 id = "g001"
 question = "vLLM 最近有哪些版本更新？重点改进了什么？"
 expected_sources = ["gh-vllm"]
 expected_keywords = ["vllm"]
+category = "version"
 notes = "版本类问题，验证 GitHub releases 数据源可被检索"
 
 [[qa]]
@@ -22,6 +39,7 @@ id = "g002"
 question = "Ollama 最新版本发布了什么？"
 expected_sources = ["gh-ollama"]
 expected_keywords = ["ollama"]
+category = "version"
 notes = "同上，另一个 releases 源"
 
 [[qa]]
@@ -29,12 +47,14 @@ id = "g003"
 question = "LangChain 最近有什么新发布？"
 expected_sources = ["gh-langchain"]
 expected_keywords = ["langchain"]
+category = "version"
 
 [[qa]]
 id = "g004"
 question = "最近有哪些关于大语言模型推理优化的研究？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "arxiv-cs-lg"]
 expected_keywords = ["推理"]
+category = "concept"
 notes = "泛化语义检索：arXiv 论文摘要应被召回"
 
 [[qa]]
@@ -42,18 +62,21 @@ id = "g005"
 question = "Transformers 库最近更新了什么？"
 expected_sources = ["gh-transformers"]
 expected_keywords = ["transformers"]
+category = "version"
 
 [[qa]]
 id = "g006"
 question = "OpenAI 最近发布了什么新闻？"
 expected_sources = ["openai-news"]
 expected_keywords = ["openai"]
+category = "news"
 
 [[qa]]
 id = "g007"
 question = "AI 行业最近有什么值得关注的动态？"
 expected_sources = ["qbitai", "openai-news", "arxiv-cs-ai"]
 expected_keywords = ["ai"]
+category = "news"
 notes = "开放型问题：多个源都可能命中"
 
 [[qa]]
@@ -61,18 +84,21 @@ id = "g008"
 question = "最近有哪些多智能体或 agent 相关的工作？"
 expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl", "gh-langchain", "gh-llamaindex"]
 expected_keywords = ["agent"]
+category = "concept"
 
 [[qa]]
 id = "g009"
 question = "LlamaIndex 有什么新版本？"
 expected_sources = ["gh-llamaindex"]
 expected_keywords = ["llamaindex"]
+category = "version"
 
 [[qa]]
 id = "g010"
 question = "RAG 检索增强生成方向最近有什么新进展？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "arxiv-cs-lg", "gh-llamaindex", "gh-langchain"]
 expected_keywords = ["rag"]
+category = "concept"
 notes = "领域核心主题"
 
 # ---- 2026-08-29 badcase 回流新增 ----
@@ -85,6 +111,7 @@ id = "g011"
 question = "中文科技媒体最近报道了哪些 AI 行业资讯？"
 expected_sources = ["qbitai"]
 expected_keywords = ["ai"]
+category = "news"
 notes = "守护标题级源（qbitai）：验证快讯/标题类文档的入库与检索路径不回归"
 
 [[qa]]
@@ -92,6 +119,7 @@ id = "g012"
 question = "有哪些关于大模型训练效率或显存优化的论文？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["model"]
+category = "cross_lingual"
 notes = "守护跨语言检索：中文问题 ↔ 英文 arXiv 论文，依赖多语言向量分支（bge-m3）"
 
 # ---- 2026-08-30 扩充：金标集从 12 条扩充到 50 条 ----
@@ -107,6 +135,7 @@ id = "g013"
 question = "vLLM 的性能优化方面做了哪些工作？"
 expected_sources = ["gh-vllm"]
 expected_keywords = ["vllm", "性能"]
+category = "version"
 notes = "版本类：验证 release notes 细节检索能力"
 
 [[qa]]
@@ -114,53 +143,22 @@ id = "g014"
 question = "Ollama 支持运行哪些模型？"
 expected_sources = ["gh-ollama"]
 expected_keywords = ["ollama", "model"]
+category = "version"
 
 [[qa]]
 id = "g015"
 question = "LangChain 和 LlamaIndex 最近哪个更新更频繁？"
 expected_sources = ["gh-langchain", "gh-llamaindex"]
 expected_keywords = ["langchain", "llamaindex"]
+category = "version"
 notes = "多源对比：两个框架发布日志应同时被检索到"
-
-[[qa]]
-id = "g016"
-question = "Transformers 库最近几个版本有什么变化？"
-expected_sources = ["gh-transformers"]
-expected_keywords = ["transformers"]
-
-[[qa]]
-id = "g017"
-question = "vLLM 最新版本修复了哪些问题？"
-expected_sources = ["gh-vllm"]
-expected_keywords = ["vllm"]
-notes = "验证 release notes 的 bug fix 细节检索"
-
-[[qa]]
-id = "g018"
-question = "Ollama 最近有什么新的更新？"
-expected_sources = ["gh-ollama"]
-expected_keywords = ["ollama"]
-notes = "换一种问法测试泛化检索（vs g002）"
-
-[[qa]]
-id = "g019"
-question = "LangChain 的发布日志里提到了什么新特性？"
-expected_sources = ["gh-langchain"]
-expected_keywords = ["langchain"]
-
-[[qa]]
-id = "g020"
-question = "LlamaIndex 最近的版本有什么重要的变化？"
-expected_sources = ["gh-llamaindex"]
-expected_keywords = ["llamaindex"]
-
-# === 研究/论文类扩展（arXiv 源覆盖加深，重点跨语言检索）===
 
 [[qa]]
 id = "g021"
 question = "有哪些关于模型量化的研究？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["quantization"]
+category = "cross_lingual"
 notes = "跨语言检索：中文问题 ↔ 英文 arXiv 论文"
 
 [[qa]]
@@ -168,6 +166,7 @@ id = "g022"
 question = "最近有没有关于 LoRA 或参数高效微调的论文？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["lora"]
+category = "cross_lingual"
 notes = "跨语言检索：PEFT 主题"
 
 [[qa]]
@@ -175,6 +174,7 @@ id = "g023"
 question = "大模型安全对齐方面有什么研究进展？"
 expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl"]
 expected_keywords = ["alignment"]
+category = "cross_lingual"
 notes = "跨语言检索：alignment / RLHF 主题"
 
 [[qa]]
@@ -182,6 +182,7 @@ id = "g024"
 question = "多模态大模型最近有什么新进展？"
 expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl", "arxiv-cs-lg"]
 expected_keywords = ["multimodal"]
+category = "cross_lingual"
 notes = "跨语言检索"
 
 [[qa]]
@@ -189,12 +190,14 @@ id = "g025"
 question = "Transformer 架构改进方面有哪些论文？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "arxiv-cs-lg"]
 expected_keywords = ["transformer"]
+category = "cross_lingual"
 
 [[qa]]
 id = "g026"
 question = "强化学习在 LLM 训练中有哪些应用？"
 expected_sources = ["arxiv-cs-ai", "arxiv-cs-lg"]
 expected_keywords = ["reinforcement"]
+category = "cross_lingual"
 notes = "跨语言检索：RLHF 相关主题"
 
 [[qa]]
@@ -202,6 +205,7 @@ id = "g027"
 question = "知识蒸馏或模型压缩最近有什么新工作？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl"]
 expected_keywords = ["distillation"]
+category = "cross_lingual"
 notes = "跨语言检索"
 
 [[qa]]
@@ -209,6 +213,7 @@ id = "g028"
 question = "prompt engineering 有哪些研究？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["prompt"]
+category = "cross_lingual"
 notes = "跨语言检索"
 
 [[qa]]
@@ -216,6 +221,7 @@ id = "g029"
 question = "长上下文处理有哪些新的研究方向？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "arxiv-cs-lg"]
 expected_keywords = ["context"]
+category = "cross_lingual"
 notes = "跨语言检索"
 
 [[qa]]
@@ -223,43 +229,17 @@ id = "g030"
 question = "有哪些关于评估大模型能力的论文？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "arxiv-cs-lg"]
 expected_keywords = ["evaluation"]
+category = "cross_lingual"
 notes = "跨语言检索"
 
 # === 行业动态类扩展（快讯级/标题级源覆盖加深）===
-
-[[qa]]
-id = "g031"
-question = "OpenAI 最近有什么产品或功能发布？"
-expected_sources = ["openai-news"]
-expected_keywords = ["openai"]
-notes = "守护快讯级源（openai-news）：min_chars=120"
-
-[[qa]]
-id = "g032"
-question = "AI 行业最近有什么融资或收购消息？"
-expected_sources = ["qbitai"]
-expected_keywords = ["ai"]
-notes = "守护标题级源（qbitai）：min_chars=5"
-
-[[qa]]
-id = "g033"
-question = "量子位最近报道了什么 AI 新闻？"
-expected_sources = ["qbitai"]
-expected_keywords = ["ai"]
-notes = "直接点名查询源标题"
-
-[[qa]]
-id = "g034"
-question = "OpenAI 最近有什么新闻动态？"
-expected_sources = ["openai-news"]
-expected_keywords = ["openai"]
-notes = "换一种问法测试泛化检索（vs g006）"
 
 [[qa]]
 id = "g035"
 question = "最近 AI 领域有什么重要的行业事件？"
 expected_sources = ["qbitai", "openai-news"]
 expected_keywords = ["ai"]
+category = "news"
 notes = "开放型问题：行业动态多源命中"
 
 # === 技术概念类（多源命中：论文 + 框架发布日志）===
@@ -269,6 +249,7 @@ id = "g036"
 question = "什么是检索增强生成（RAG）？"
 expected_sources = ["arxiv-cs-cl", "gh-llamaindex", "gh-langchain"]
 expected_keywords = ["rag"]
+category = "concept"
 notes = "概念类：论文和框架发布日志都可能命中"
 
 [[qa]]
@@ -276,20 +257,23 @@ id = "g037"
 question = "推理加速有哪些技术手段？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "gh-vllm"]
 expected_keywords = ["inference"]
+category = "concept"
 notes = "跨源：论文 + vLLM 发布日志"
 
 [[qa]]
 id = "g038"
-question = "什么是 mixture of experts（MoE）？"
-expected_sources = ["arxiv-cs-lg", "arxiv-cs-ai", "arxiv-cs-cl"]
-expected_keywords = ["mixture"]
-notes = "跨语言检索"
+question = "FlashAttention 是什么？它如何降低注意力计算的显存与开销？"
+expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["flashattention", "注意力"]
+category = "concept"
+notes = "技术概念类：注意力加速（原 g038「什么是MoE」与 g055 近重复，2026-10-02 替换为独立主题）"
 
 [[qa]]
 id = "g039"
 question = "什么是指令微调（instruction tuning）？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["instruction"]
+category = "concept"
 notes = "跨语言检索"
 
 [[qa]]
@@ -297,6 +281,7 @@ id = "g040"
 question = "大模型的涌现能力是什么？"
 expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl", "arxiv-cs-lg"]
 expected_keywords = ["emergent"]
+category = "concept"
 notes = "跨语言检索"
 
 [[qa]]
@@ -304,6 +289,7 @@ id = "g041"
 question = "什么是思维链推理？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["chain"]
+category = "concept"
 notes = "跨语言检索：chain-of-thought"
 
 [[qa]]
@@ -311,6 +297,7 @@ id = "g042"
 question = "有哪些关于模型幻觉的研究？"
 expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["hallucination"]
+category = "concept"
 notes = "跨语言检索"
 
 # === 多跳推理类（需要同时检索多个源做对比）===
@@ -320,6 +307,7 @@ id = "g043"
 question = "vLLM 和 Ollama 分别针对什么场景？它们的定位有什么区别？"
 expected_sources = ["gh-vllm", "gh-ollama"]
 expected_keywords = ["vllm", "ollama"]
+category = "multihop"
 notes = "多跳：需要同时检索两个框架的发布日志做对比"
 
 [[qa]]
@@ -327,6 +315,7 @@ id = "g044"
 question = "LangChain 和 LlamaIndex 在 RAG 方面有什么不同的设计？"
 expected_sources = ["gh-langchain", "gh-llamaindex", "arxiv-cs-cl"]
 expected_keywords = ["langchain", "llamaindex"]
+category = "multihop"
 notes = "多跳：框架发布日志 + RAG 论文"
 
 [[qa]]
@@ -334,6 +323,7 @@ id = "g045"
 question = "Transformers 库最近更新和 arXiv 上有什么相关的论文研究？"
 expected_sources = ["gh-transformers", "arxiv-cs-cl", "arxiv-cs-ai"]
 expected_keywords = ["transformers"]
+category = "multihop"
 notes = "多跳：框架发布 + 论文交叉检索"
 
 [[qa]]
@@ -341,37 +331,521 @@ id = "g046"
 question = "最近有哪些关于大模型推理的论文和工具发布？"
 expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl", "gh-vllm", "gh-ollama"]
 expected_keywords = ["inference"]
+category = "multihop"
 notes = "多跳：论文 + 工具发布日志"
 
 # === 负例（应拒绝回答的问题，验证系统不会编造答案）===
 # expected_sources 留空：检索层可能返回结果（BM25+向量总会给出 top-k），
 # 但生成层应基于 system prompt 说"资料不足，无法回答"。
 # 关键词覆盖检查回答中是否包含拒绝性表述。
+# 双层防护对齐：线上问答会先经「领域守卫」在检索前拦截（拒答话术含"超出…领域范围"），
+# 因此负例关键词统一含 不知道/无法/不足/超出/领域，使「守卫拦截」与「生成拒答」两条路径都能判过。
 
 [[qa]]
 id = "g047"
 question = "今天北京天气怎么样？"
 expected_sources = []
-expected_keywords = ["不知道", "无法", "不足"]
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
 notes = "负例：超出知识库领域，系统应回答不知道"
 
 [[qa]]
 id = "g048"
 question = "推荐一道家常菜的做法"
 expected_sources = []
-expected_keywords = ["不知道", "无法", "不足"]
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
 notes = "负例：超出 AI/LLM 领域"
 
 [[qa]]
 id = "g049"
 question = "最近有什么足球比赛？"
 expected_sources = []
-expected_keywords = ["不知道", "无法", "不足"]
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
 notes = "负例：超出 AI/LLM 领域"
 
 [[qa]]
 id = "g050"
 question = "如何办理护照？"
 expected_sources = []
-expected_keywords = ["不知道", "无法", "不足"]
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
 notes = "负例：验证系统不会编造答案，应明确回答不知道"
+
+# === 2026-09-30 扩充：从 42 条扩充到 100 条 ===
+# 新增维度：模型架构细节、Agent/工具调用、推理部署、评测方法论、
+#         安全对齐、多模态、行业商业、RAG深度、Prompt工程、工具框架、负例
+# 每条新增问题均基于现有启用数据源设计，确保 expected_sources 有效
+
+[[qa]]
+id = "g051"
+question = "Transformer 架构中的注意力机制是如何工作的？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-lg"]
+expected_keywords = ["transformer", "注意力"]
+category = "concept"
+notes = "技术概念类：基础架构理解"
+
+[[qa]]
+id = "g052"
+question = "什么是 PagedAttention？它解决了什么问题？"
+expected_sources = ["gh-vllm", "arxiv-cs-lg"]
+expected_keywords = ["pagedattention", "vllm"]
+category = "concept"
+notes = "技术概念类：vLLM 核心技术"
+
+[[qa]]
+id = "g053"
+question = "LoRA 和全量微调相比有什么优势和局限？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-lg"]
+expected_keywords = ["lora", "微调"]
+category = "concept"
+notes = "技术对比类：参数高效微调"
+
+[[qa]]
+id = "g054"
+question = "大模型的 KV cache 是什么？为什么能加速推理？"
+expected_sources = ["arxiv-cs-lg", "gh-vllm"]
+expected_keywords = ["kv cache", "推理"]
+category = "concept"
+notes = "技术概念类：推理优化基础"
+
+[[qa]]
+id = "g055"
+question = "什么是 Mixture of Experts（MoE）？它如何降低推理成本？"
+expected_sources = ["arxiv-cs-cl", "qbitai"]
+expected_keywords = ["moe", "专家"]
+category = "concept"
+notes = "技术概念类：MoE架构"
+
+[[qa]]
+id = "g056"
+question = "量化技术（如 4-bit / 8-bit）是如何在保持精度的同时减少显存占用的？"
+expected_sources = ["arxiv-cs-lg", "arxiv-cs-cl"]
+expected_keywords = ["量化", "显存"]
+category = "concept"
+notes = "技术概念类：量化原理"
+
+[[qa]]
+id = "g057"
+question = "什么是 RoPE 位置编码？它和绝对位置编码有什么区别？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-lg"]
+expected_keywords = ["rope", "位置编码"]
+category = "concept"
+notes = "技术概念类：位置编码"
+
+[[qa]]
+id = "g058"
+question = "RAG 和微调（Fine-tuning）分别适合什么场景？如何选择？"
+expected_sources = ["arxiv-cs-cl", "gh-llamaindex", "gh-langchain"]
+expected_keywords = ["rag", "微调"]
+category = "concept"
+notes = "决策类：RAG vs 微调选型"
+
+[[qa]]
+id = "g059"
+question = "什么是 ReAct 模式？它在 Agent 中是如何工作的？"
+expected_sources = ["arxiv-cs-ai", "gh-langchain"]
+expected_keywords = ["react", "agent"]
+category = "concept"
+notes = "技术概念类：Agent 经典范式"
+
+[[qa]]
+id = "g060"
+question = "多 Agent 系统和单 Agent 相比有什么优势和挑战？"
+expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl", "gh-langchain"]
+expected_keywords = ["agent", "多智能体"]
+category = "concept"
+notes = "技术对比类：多 Agent"
+
+[[qa]]
+id = "g061"
+question = "Agent 的工具调用（tool use）是如何实现的？"
+expected_sources = ["arxiv-cs-ai", "gh-langchain", "gh-llamaindex"]
+expected_keywords = ["tool", "工具调用"]
+category = "concept"
+notes = "技术概念类：工具调用"
+
+[[qa]]
+id = "g062"
+question = "LangGraph 是什么？它解决了 LangChain 的什么问题？"
+expected_sources = ["gh-langchain", "arxiv-cs-ai"]
+expected_keywords = ["langgraph", "langchain"]
+category = "concept"
+notes = "框架对比类：LangGraph"
+
+[[qa]]
+id = "g063"
+question = "连续批处理（continuous batching）和静态批处理有什么区别？"
+expected_sources = ["arxiv-cs-lg", "gh-vllm"]
+expected_keywords = ["batching", "批处理"]
+category = "concept"
+notes = "技术概念类：推理调度"
+
+[[qa]]
+id = "g064"
+question = "vLLM 和 TensorRT-LLM 在推理加速上有什么不同？"
+expected_sources = ["gh-vllm", "arxiv-cs-lg"]
+expected_keywords = ["vllm", "tensorrt", "推理"]
+category = "concept"
+notes = "技术对比类：推理引擎对比"
+
+[[qa]]
+id = "g065"
+question = "Ollama 和 llama.cpp 是什么关系？它们分别适合什么场景？"
+expected_sources = ["gh-ollama", "arxiv-cs-lg"]
+expected_keywords = ["ollama", "llama.cpp"]
+category = "concept"
+notes = "工具对比类：本地部署"
+
+[[qa]]
+id = "g066"
+question = "什么是 speculative decoding？它如何加速推理？"
+expected_sources = ["arxiv-cs-lg", "gh-vllm"]
+expected_keywords = ["speculative", "推理"]
+category = "concept"
+notes = "技术概念类：投机解码"
+
+[[qa]]
+id = "g067"
+question = "本地部署大模型需要多少显存？怎么估算？"
+expected_sources = ["gh-ollama", "arxiv-cs-lg"]
+expected_keywords = ["显存", "部署"]
+category = "concept"
+notes = "实践类：显存估算"
+
+[[qa]]
+id = "g068"
+question = "MMLU 是什么基准？它评测大模型的什么能力？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["mmlu", "基准"]
+category = "concept"
+notes = "评测基准类：MMLU"
+
+[[qa]]
+id = "g069"
+question = "HumanEval 和 MBPP 分别评测什么能力？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["humaneval", "mbpp", "代码"]
+category = "concept"
+notes = "评测基准类：代码能力"
+
+[[qa]]
+id = "g070"
+question = "什么是 LLM-as-a-Judge？它有什么优缺点？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["judge", "评估"]
+category = "concept"
+notes = "评测方法论类：LLM 评分"
+
+[[qa]]
+id = "g071"
+question = "RAG 系统的检索质量通常用哪些指标评估？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["rag", "检索", "指标"]
+category = "concept"
+notes = "评测方法论类：RAG 评估"
+
+[[qa]]
+id = "g072"
+question = "什么是幻觉（hallucination）？有哪些方法可以减少幻觉？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["幻觉", "hallucination"]
+category = "concept"
+notes = "问题类：幻觉缓解"
+
+[[qa]]
+id = "g073"
+question = "RLHF 是什么？它在大模型训练中起什么作用？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["rlhf", "对齐"]
+category = "concept"
+notes = "技术概念类：RLHF"
+
+[[qa]]
+id = "g074"
+question = "DPO 和 RLHF 相比有什么不同？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["dpo", "rlhf"]
+category = "concept"
+notes = "技术对比类：对齐方法"
+
+[[qa]]
+id = "g075"
+question = "大模型的越狱（jailbreak）攻击是什么？有哪些常见的防御方法？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["越狱", "安全"]
+category = "concept"
+notes = "安全类：越狱攻击"
+
+[[qa]]
+id = "g076"
+question = "什么是红队测试（red teaming）在 AI 安全中的应用？"
+expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl"]
+expected_keywords = ["红队", "安全"]
+category = "concept"
+notes = "安全类：红队测试"
+
+[[qa]]
+id = "g077"
+question = "多模态大模型是如何同时处理文本和图像的？"
+expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl"]
+expected_keywords = ["多模态", "视觉"]
+category = "concept"
+notes = "技术概念类：多模态架构（原引 arxiv-cs-cv 未注册，2026-10-02 改指 cs.AI/cs.CL）"
+
+[[qa]]
+id = "g078"
+question = "什么是视觉编码器（vision encoder）？常见的有哪些？"
+expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl"]
+expected_keywords = ["视觉", "encoder"]
+category = "concept"
+notes = "技术概念类：视觉编码器（原引 arxiv-cs-cv 未注册，2026-10-02 改指 cs.AI/cs.CL）"
+
+[[qa]]
+id = "g079"
+question = "LLaVA 是什么类型的模型？它是如何构建的？"
+expected_sources = ["arxiv-cs-ai", "arxiv-cs-cl"]
+expected_keywords = ["llava", "多模态"]
+category = "concept"
+notes = "具体模型类：LLaVA（原引 arxiv-cs-cv 未注册，2026-10-02 改指 cs.AI/cs.CL）"
+
+[[qa]]
+id = "g080"
+question = "多模态模型在哪些领域有实际应用？"
+expected_sources = ["qbitai", "openai-news", "arxiv-cs-ai"]
+expected_keywords = ["多模态", "应用"]
+category = "concept"
+notes = "应用类：多模态落地"
+
+[[qa]]
+id = "g081"
+question = "AI 芯片市场有哪些主要玩家？各自的定位是什么？"
+expected_sources = ["qbitai", "openai-news"]
+expected_keywords = ["芯片", "gpu"]
+category = "news"
+notes = "行业类：AI 芯片"
+
+[[qa]]
+id = "g082"
+question = "最近有哪些值得关注的 AI 创业公司融资事件？"
+expected_sources = ["qbitai"]
+expected_keywords = ["融资", "创业"]
+category = "news"
+notes = "行业类：融资动态"
+
+[[qa]]
+id = "g083"
+question = "AI Agent 赛道最近有哪些产品发布？"
+expected_sources = ["qbitai", "openai-news"]
+expected_keywords = ["agent", "产品"]
+category = "news"
+notes = "产品类：Agent 产品"
+
+[[qa]]
+id = "g084"
+question = "国内大模型厂商最近有什么新产品或版本发布？"
+expected_sources = ["qbitai"]
+expected_keywords = ["国产", "发布"]
+category = "version"
+notes = "行业类：国内厂商动态"
+
+[[qa]]
+id = "g085"
+question = "AI 生成式内容（AIGC）在哪些行业应用最广泛？"
+expected_sources = ["qbitai", "openai-news"]
+expected_keywords = ["aigc", "应用"]
+category = "news"
+notes = "应用类：AIGC 落地"
+
+[[qa]]
+id = "g086"
+question = "RAG 的 chunk size（块大小）对检索效果有什么影响？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["chunk", "切块"]
+category = "concept"
+notes = "实践类：切块策略"
+
+[[qa]]
+id = "g087"
+question = "混合检索（hybrid search）相比纯向量检索好在哪里？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["混合检索", "hybrid"]
+category = "concept"
+notes = "技术对比类：检索方式"
+
+[[qa]]
+id = "g088"
+question = "什么是 RRF（Reciprocal Rank Fusion）？它怎么融合多路检索结果？"
+expected_sources = ["arxiv-cs-ai"]
+expected_keywords = ["rrf", "融合"]
+category = "concept"
+notes = "算法类：RRF 融合"
+
+[[qa]]
+id = "g089"
+question = "RAG 中的 rerank（重排序）是什么作用？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["rerank", "重排序"]
+category = "concept"
+notes = "技术概念类：重排序"
+
+[[qa]]
+id = "g090"
+question = "向量数据库和普通数据库有什么区别？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["向量数据库", "embedding"]
+category = "concept"
+notes = "技术对比类：向量数据库"
+
+[[qa]]
+id = "g091"
+question = "什么是 Chain-of-Thought（思维链）提示？为什么有效？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["思维链", "chain of thought"]
+category = "concept"
+notes = "技术概念类：CoT"
+
+[[qa]]
+id = "g092"
+question = "Few-shot learning 和 Zero-shot learning 有什么区别？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["few-shot", "zero-shot"]
+category = "concept"
+notes = "技术对比类：提示学习"
+
+[[qa]]
+id = "g093"
+question = "什么是 system prompt？它在对话系统中起什么作用？"
+expected_sources = ["arxiv-cs-cl", "gh-langchain"]
+expected_keywords = ["system", "系统提示"]
+category = "concept"
+notes = "实践类：系统提示词"
+
+[[qa]]
+id = "g094"
+question = "Self-consistency（自一致性）方法是如何提升推理准确率的？"
+expected_sources = ["arxiv-cs-cl"]
+expected_keywords = ["self-consistency", "推理"]
+category = "concept"
+notes = "技术概念类：自一致性"
+
+[[qa]]
+id = "g095"
+question = "RAG 中的 parent-child 检索（小块检索、大块返回）是怎么工作的？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["parent", "检索"]
+category = "concept"
+notes = "RAG 深度类：父子块检索（原 g095 与 g044 近重复，2026-10-02 替换为独立主题）"
+
+[[qa]]
+id = "g096"
+question = "Transformers 库主要提供什么功能？它在 NLP 领域的地位如何？"
+expected_sources = ["gh-transformers", "arxiv-cs-cl"]
+expected_keywords = ["transformers", "huggingface"]
+category = "concept"
+notes = "工具类：Transformers 库"
+
+[[qa]]
+id = "g097"
+question = "什么是 Embedding（嵌入）？为什么说它是语义检索的基础？"
+expected_sources = ["arxiv-cs-cl", "gh-llamaindex"]
+expected_keywords = ["embedding", "嵌入"]
+category = "concept"
+notes = "技术概念类：嵌入向量"
+
+[[qa]]
+id = "g098"
+question = "怎么炒番茄炒蛋？"
+expected_sources = []
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
+notes = "负例：烹饪领域，系统应拒绝"
+
+[[qa]]
+id = "g099"
+question = "北京到上海的高铁票多少钱？"
+expected_sources = []
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
+notes = "负例：交通票务，系统应拒绝"
+
+[[qa]]
+id = "g100"
+question = "帮我写一封辞职信模板"
+expected_sources = []
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
+notes = "负例：职场文书，系统应拒绝"
+
+[[qa]]
+id = "g101"
+question = "什么是 token？大模型的 token 和字数有什么关系？"
+expected_sources = ["arxiv-cs-cl", "gh-vllm"]
+expected_keywords = ["token", "词元"]
+category = "concept"
+notes = "基础概念类：token 化"
+
+[[qa]]
+id = "g102"
+question = "上下文窗口（context window）是什么意思？"
+expected_sources = ["arxiv-cs-lg", "gh-vllm"]
+expected_keywords = ["context", "上下文"]
+category = "concept"
+notes = "基础概念类：上下文窗口"
+
+[[qa]]
+id = "g103"
+question = "什么是 temperature 参数？它如何影响输出？"
+expected_sources = ["arxiv-cs-cl", "gh-langchain"]
+expected_keywords = ["temperature", "温度"]
+category = "concept"
+notes = "实践类：采样参数"
+
+[[qa]]
+id = "g104"
+question = "知识蒸馏如何把大模型变小变快？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-lg"]
+expected_keywords = ["蒸馏", "distillation"]
+category = "concept"
+notes = "技术概念类：知识蒸馏"
+
+[[qa]]
+id = "g105"
+question = "什么是 in-context learning？为什么大模型能做到？"
+expected_sources = ["arxiv-cs-cl", "arxiv-cs-ai"]
+expected_keywords = ["in-context", "上下文学习"]
+category = "concept"
+notes = "技术概念类：上下文学习"
+
+[[qa]]
+id = "g106"
+question = "RAG 中的查询重写（query rewriting）有什么用？"
+expected_sources = ["arxiv-cs-ai", "gh-llamaindex"]
+expected_keywords = ["query", "重写"]
+category = "concept"
+notes = "RAG优化类：查询重写"
+
+[[qa]]
+id = "g107"
+question = "AI 编程助手是如何自动补全代码的？"
+expected_sources = ["gh-transformers", "qbitai"]
+expected_keywords = ["copilot", "代码"]
+category = "concept"
+notes = "应用类：AI 编程"
+
+[[qa]]
+id = "g108"
+question = "AI 语音合成（TTS）最近有什么进展？"
+expected_sources = ["arxiv-cs-ai", "qbitai"]
+expected_keywords = ["tts", "语音"]
+category = "concept"
+notes = "技术类：语音合成（原引 arxiv-cs-sd 未注册，2026-10-02 改指 cs.AI + qbitai）"
+
+[[qa]]
+id = "g109"
+question = "帮我做一份旅游攻略"
+expected_sources = []
+expected_keywords = ["不知道", "无法", "不足", "超出", "领域"]
+category = "negative"
+notes = "负例：生活服务类，系统应拒绝"

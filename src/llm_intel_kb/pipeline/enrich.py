@@ -20,6 +20,9 @@ _ENRICH_PROMPT = """你是一个 AI/LLM 领域情报库的编目员。请阅读�
 正文：{content}"""
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+# LLM 常见语法错误：字符串值漏写开头引号，如 "summary": 文本"  →  "summary": "文本"
+# 仅匹配 summary 字段（自由文本），不碰 topics 数组等结构化值
+_MISSING_QUOTE_RE = re.compile(r'("summary":\s*)([^"][^,}\]]*?")')
 _MAX_CONTENT_CHARS = 6000
 
 
@@ -93,11 +96,21 @@ def enrich_corpus(
 
 
 def _parse_json_reply(reply: str) -> dict[str, object]:
-    """容错解析：模型可能把 JSON 包在 ```json 围栏或多余文本里."""
+    """容错解析：模型可能把 JSON 包在 ```json 围栏或多余文本里，或漏写字符串开头引号."""
     match = _JSON_BLOCK_RE.search(reply)
     if match is None:
         raise ValueError(f"回复中未找到 JSON：{reply[:80]}")
-    parsed: object = json.loads(match.group(0))
+    raw = match.group(0)
+    try:
+        parsed: object = json.loads(raw)
+    except json.JSONDecodeError:
+        # 尝试修复常见语法错误：字符串值漏写开头引号
+        fixed = _MISSING_QUOTE_RE.sub(r'\1"\2', raw)
+        try:
+            parsed = json.loads(fixed)
+        except json.JSONDecodeError:
+            # 最后兜底：允许字符串中出现未转义控制字符（换行/制表）
+            parsed = json.loads(fixed, strict=False)
     if not isinstance(parsed, dict):
         raise ValueError("富化结果不是 JSON 对象")
     return parsed

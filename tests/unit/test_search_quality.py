@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from llm_intel_kb.index.chunking import Chunk
 from llm_intel_kb.index.search import (
-    HybridSearcher,
     _QUALITY_FULL_CHARS,
     _TITLE_QUALITY_MULTIPLIER,
+    HybridSearcher,
     _quality_multiplier,
 )
 from llm_intel_kb.index.store_local import IndexMeta, IndexState
@@ -89,7 +89,7 @@ class TestQualityMultiplier:
     def test_monotonically_increasing(self) -> None:
         # 乘数应随长度单调不减
         lengths = [0, 10, 20, 50, 80, 99, 100, 200]
-        values = [_quality_multiplier(l) for l in lengths]
+        values = [_quality_multiplier(length) for length in lengths]
         for i in range(1, len(values)):
             assert values[i] >= values[i - 1]
 
@@ -179,11 +179,16 @@ class TestHybridSearcherQualityPenalty:
         state = _make_state([title_only, content_chunk])
         searcher = HybridSearcher(state, backend=None)
 
-        # 手动计算期望的质量乘数
+        # 质量乘数：标题级惩罚更大，内容块无惩罚
         q_title = _quality_multiplier(len(title_only.search_text))
         q_content = _quality_multiplier(len(content_chunk.search_text))
-        assert q_title < q_content  # 标题级惩罚更大
-        assert q_content == 1.0  # 内容块无惩罚
+        assert q_title < q_content
+        assert q_content == 1.0
+
+        # 落到 SearchHit.rrf_score 上：内容块分数应高于被降权的标题级块
+        hits = searcher.search("agent", k=5)
+        scores = {hit.chunk.id: hit.rrf_score for hit in hits}
+        assert scores["qbitai:0"] < scores["arxiv:0"]
 
 
 def searcher_quality(searcher: HybridSearcher, chunk_id: str) -> float:

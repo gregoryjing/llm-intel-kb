@@ -43,17 +43,18 @@
 | M2+ | pgvector 可选后端（HNSW ANN，与本地文件索引接口对齐） | ✅ 完成 |
 | M3 | 评估面：金标集 → 自动评估 → 回归门禁 → badcase 回流 | ✅ 完成 |
 | M4 | 交付：Web UI（问答/语料/版本/评估）· 作品集文档 | ✅ 完成 |
+| M5 | 证据级评估（块级证据率/忠实度）· 领域守卫（规则+豁免+语义兜底+回归闭环） | ✅ 完成 |
 
 **真实数据验收**（2026-08-29，混合检索 BM25 + bge-m3；生成层对比本地 qwen3-vl:8b 与远程 dots3-note-prev）：
 
 | 指标 | 数值 |
 |---|---|
 | 数据源 | 12 个注册（arXiv cs.AI/cs.CL/cs.LG、OpenAI 新闻、量子位、LangChain/LlamaIndex/vLLM/Ollama/Transformers Releases 等） |
-| 语料规模 | 103 篇文档 · 727 个检索块 · 3 个版本快照 |
-| 检索评估 | hit@5 = 100% · MRR = 0.840（混合检索：BM25 + bge-m3 向量 RRF 融合 + 内容质量感知排序，12 条金标问题） |
-| 生成评估 | 同一检索层换生成模型：本地 8B judge 3.33 / 通过率 83% → 远程 dots3 judge 4.42 / 通过率 100% |
+| 语料规模 | 103 篇文档 · 727 个检索块 · 4 个版本快照 |
+| 检索评估 | 12 条金标（初期）：hit@5 = 100% · MRR = 0.840；**100 条金标（当前基线）：hit@5 = 78% · MRR = 0.527**（混合检索：BM25 + bge-m3 向量 RRF 融合 + 内容质量感知排序） |
+| 生成评估 | 同一检索层换生成模型（12 条金标）：本地 8B judge 3.33 / 通过率 83% → 远程 dots3 judge 4.42 / 通过率 100%；100 条金标下 dots3 judge 3.0 / 通过率 55%（含 negative 反例与守卫拦截场景） |
 | 问答链路 | 端到端 10.7s（本地 8B 模型），答案带 `[n]` 引用标注，引用率 100% |
-| 质量门禁 | ruff 0 错误 · mypy strict 37 文件通过 · 102 个单元测试全绿 |
+| 质量门禁 | ruff 0 错误 · mypy strict 全量通过 · 146 个单元测试全绿 |
 
 ### 生成模型对比（同一金标集 × 不同生成模型，eval run -p 切换）
 
@@ -87,6 +88,10 @@ badcase 复盘沉淀的三条工程结论（详见 `data_sources.toml` 与 `llm_
    直接从 miss 变 rank-1。
 
 ## 快速开始
+
+> 📄 文档导航：现场演示与面试问答看 [docs/面试备战手册.md](docs/面试备战手册.md)；
+> 完整使用说明看 [USAGE.md](USAGE.md)；架构决策与历史踩坑看 [HANDOFF.md](HANDOFF.md)。
+> 历史设计文档归档在 `docs/archive/`。
 
 前置：Python 3.11+；模型服务（本地 Ollama 或远程 API 至少其一）；数据库可选（不用 pgvector 就跑本地文件索引）。
 
@@ -256,8 +261,8 @@ llm-intel-kb eval baseline             # 把当前报告固化为新基线
 
 ## 测试与质量门禁
 
-- **单元测试（77 个）**：管线（清洗/哈希/去重/快照/回滚）、检索（BM25/RRF/切块）、
-  评估（指标计算/门禁判定）、供应商解析（toml/env 回退/`env:` Key 语法/本地远程判定）、
+- **单元测试（146 个）**：管线（清洗/哈希/去重/快照/回滚）、检索（BM25/RRF/切块/质量惩罚）、
+  评估（指标计算/门禁判定/块级证据率）、守卫（规则/豁免/语义兜底/回归）、供应商解析（toml/env 回退/`env:` Key 语法/本地远程判定）、
   客户端 mock、CLI 渲染
 - **集成测试**（`-m integration`）：真实 PostgreSQL/pgvector 幂等性、本地 Ollama 连通性
   （`LLMKB_SKIP_LOCAL_LLM=1` 可跳）、远程 API（配 Key 才跑）
@@ -293,15 +298,19 @@ llm-intel-kb/
 │   │   │                  #         search RRF 混合检索 · store_local / store_pg 双后端
 │   ├── rag/               # 引用生成（提示词要求 [n] 标注，只依据检索结果）
 │   ├── eval/              # 评估面：golden 金标集 · runner 指标 · gate 回归门禁
-│   ├── llm/               # 供应商抽象 + OpenAI/Ollama 双适配器客户端
+│   ├── guard/             # 领域守卫：规则词表 + 领域词豁免 · 语义兜底 · 回归用例
+│   ├── llm/               # 供应商抽象 + OpenAI/Ollama/Anthropic 三适配器客户端
 │   ├── web/               # FastAPI 后端 + 自包含单页前端（无 CDN，断网可用）
-│   ├── cli/               # typer 命令：data / index / eval / serve / doctor / compare
+│   ├── cli/               # typer 命令：data / index / eval / guard / serve / doctor / compare
 │   ├── store/db.py        # SQLAlchemy 引擎 + pgvector 扩展幂等安装
 │   └── checks.py          # doctor 体检项
-├── tests/                 # unit（77 个）+ integration（DB/本地模型/API）
-├── golden/qa.toml         # 金标问答集（badcase 回流的目标）
+├── tests/                 # unit（146 个）+ integration（DB/本地模型/API）
+├── golden/                # qa.toml 金标问答集（100 条）· guard_cases.toml 守卫回归（12 条）
+├── docs/                  # 面试备战手册.md（演示流程+话术+问答）· archive/（历史设计文档）
 ├── data_sources.toml      # 数据源注册表（12 源，enabled 开关）
 ├── llm_providers.toml     # 模型供应商注册表
+├── USAGE.md               # 完整使用说明（从启动到日常使用）
+├── HANDOFF.md             # 架构决策与历史踩坑交接
 └── docker-compose.yml     # pgvector:pg16
 ```
 

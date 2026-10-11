@@ -45,6 +45,11 @@ def load_sources(path: Path | None) -> list[SourceSpec]:
     return specs
 
 
+def enabled_source_ids(path: Path | None = None) -> set[str]:
+    """已启用数据源的 id 集合（用于校验金标集 expected_sources 是否引用未注册源）."""
+    return {spec.id for spec in load_sources(path) if spec.enabled}
+
+
 def _spec_from_section(section_name: str, section: dict[str, object]) -> SourceSpec:
     def opt_str(key: str) -> str | None:
         value = section.get(key)

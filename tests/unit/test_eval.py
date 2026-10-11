@@ -224,19 +224,27 @@ class TestEntryPassed:
 
 class TestParseJudgeReply:
     def test_strict_json(self) -> None:
-        assert _parse_judge_reply('{"score": 4, "comment": "不错"}') == (4.0, "不错")
+        assert _parse_judge_reply('{"score": 4, "comment": "不错"}') == (4.0, None, "不错")
+
+    def test_json_with_faithfulness(self) -> None:
+        reply = '{"score": 5, "faithfulness": 4, "comment": "有依据"}'
+        assert _parse_judge_reply(reply) == (5.0, 4.0, "有依据")
 
     def test_json_wrapped_in_prose(self) -> None:
         reply = '好的，评分如下：\n{"score": 5, "comment": "优秀"}'
-        assert _parse_judge_reply(reply) == (5.0, "优秀")
+        assert _parse_judge_reply(reply) == (5.0, None, "优秀")
 
     def test_unquoted_comment_fallback(self) -> None:
         # dots3 实测输出：comment 值不带引号（非法 JSON）
         reply = '{"score": 5, "comment": 回答准确完整，引用充分。}'
-        assert _parse_judge_reply(reply) == (5.0, "回答准确完整，引用充分。")
+        assert _parse_judge_reply(reply) == (5.0, None, "回答准确完整，引用充分。")
+
+    def test_regex_fallback_extracts_faithfulness(self) -> None:
+        reply = '评分 {"score": 4, "faithfulness": 3, "comment": 部分缺漏}'
+        assert _parse_judge_reply(reply) == (4.0, 3.0, "部分缺漏")
 
     def test_no_score_returns_none(self) -> None:
-        assert _parse_judge_reply("这个回答挺好的") == (None, None)
+        assert _parse_judge_reply("这个回答挺好的") == (None, None, None)
 
     def test_empty_reply(self) -> None:
-        assert _parse_judge_reply("") == (None, None)
+        assert _parse_judge_reply("") == (None, None, None)

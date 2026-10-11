@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LLM 情报知识库</title>
+<title>LLM Intelligence Knowledge Base</title>
 <style>
 :root {
   --bg: #0d1117; --panel: #161b22; --panel2: #1c2129; --border: #2d333b;
@@ -38,6 +38,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 24px; }
 #question { flex: 1; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; }
 #question:focus { border-color: var(--accent); }
 select { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; color: var(--text); }
+textarea { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; width: 100%; font-family: var(--mono); resize: vertical; line-height: 1.5; }
+textarea:focus { border-color: var(--accent); }
 .btn { background: #238636; border: none; color: #fff; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer; }
 .btn:hover { background: #2ea043; } .btn:disabled { opacity: .5; cursor: wait; }
 .btn.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
@@ -94,11 +96,43 @@ td.num { font-family: var(--mono); text-align: right; }
 .empty { color: var(--dim); text-align: center; padding: 40px 0; }
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 18px; z-index: 200; display: none; }
 .note { font-size: 12px; color: var(--dim); line-height: 1.6; }
+
+/* 对比模式 */
+.compare-cols { display: flex; gap: 12px; align-items: flex-start; }
+.compare-col { flex: 1; min-width: 0; }
+.compare-col .col-head { display: flex; align-items: center; gap: 6px; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.compare-col .col-head .col-title { font-size: 13px; font-weight: 600; }
+.compare-col .col-head .col-time { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.compare-col .col-body { font-size: 13px; line-height: 1.7; white-space: pre-wrap; min-height: 60px; }
+.compare-col .col-error { color: var(--red); font-size: 13px; }
+.model-checks { display: flex; gap: 10px; flex-wrap: wrap; padding: 8px 0; }
+.model-check { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); }
+.model-check input { margin: 0; }
+.model-check:has(input:checked) { border-color: var(--accent); background: rgba(88,166,255,.1); }
+.toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.toggle { position: relative; width: 40px; height: 22px; background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; transition: background .2s; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: var(--dim); border-radius: 50%; transition: all .2s; }
+.toggle.on { background: rgba(88,166,255,.3); }
+.toggle.on::after { left: 20px; background: var(--accent); }
+.toggle-label { font-size: 13px; color: var(--dim); }
+.toggle-label.active { color: var(--text); }
+
+/* 模型管理弹窗 */
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+.form-row { display: flex; gap: 12px; }
+.form-row .form-group { flex: 1; }
+.runtime-tag { display: inline-block; background: rgba(63,185,80,.15); color: var(--green); font-size: 10px; padding: 1px 6px; border-radius: 999px; margin-left: 4px; }
+.provider-list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--panel2); }
+.provider-list-item .pi-name { font-family: var(--mono); font-size: 13px; }
+.provider-list-item .pi-model { font-size: 12px; color: var(--dim); }
 </style>
 </head>
 <body>
 <header>
-  <h1>🧠 LLM <span>情报知识库</span></h1>
+  <h1>🧠 <span>LLM Intelligence Knowledge Base</span></h1>
   <div id="status-chips"></div>
 </header>
 <nav>
@@ -106,17 +140,29 @@ td.num { font-family: var(--mono); text-align: right; }
   <button data-tab="corpus">📚 语料库</button>
   <button data-tab="snapshots">🕘 版本历史</button>
   <button data-tab="eval">📊 质量评估</button>
+  <button data-tab="guard">🛡 领域守卫</button>
 </nav>
 
 <main>
   <!-- 问答 -->
   <section id="tab-ask" class="tab active">
     <div class="panel">
+      <div class="toggle-row">
+        <div class="toggle" id="compare-toggle"></div>
+        <span class="toggle-label" id="compare-label">单模型模式</span>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn ghost" id="manage-providers-btn">⚙ 模型管理</button>
+      </div>
       <form id="ask-form">
         <input id="question" type="text" placeholder="问点什么，比如：vLLM 最近有什么值得关注的更新？" autocomplete="off">
-        <select id="provider-select"><option value="">默认模型</option></select>
+        <span id="single-provider-wrap">
+          <select id="provider-select"><option value="">默认模型</option></select>
+        </span>
         <button class="btn" id="ask-btn" type="submit">提问</button>
       </form>
+      <div id="compare-select-wrap" style="display:none">
+        <div class="model-checks" id="model-checkboxes"></div>
+      </div>
       <div id="ask-hint">回答基于当前索引的检索结果，标注 [n] 引用；回答下方列出全部来源。</div>
     </div>
     <div id="ask-result"></div>
@@ -159,6 +205,97 @@ td.num { font-family: var(--mono); text-align: right; }
   <section id="tab-eval" class="tab">
     <div id="eval-content"><div class="empty">加载中…</div></div>
   </section>
+
+  <!-- 领域守卫（无关项排除区） -->
+  <section id="tab-guard" class="tab">
+    <div class="panel">
+      <h3>无关项排除区 · 领域范围判定</h3>
+      <p class="note" style="margin-bottom:12px">在检索前判断问题是否属于本知识库领域；命中无关项则直接拦截，<strong style="color:var(--text)">不触发检索与生成</strong>。纯规则词表匹配：零依赖、离线可用、决策可解释、可审计。</p>
+      <div class="toggle-row">
+        <div class="toggle" id="guard-enabled"></div>
+        <span class="toggle-label" id="guard-enabled-label">守卫已启用</span>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>范围名称（出现在拒答话术的 {scope} 占位）</label>
+          <input type="text" id="guard-scope-name">
+        </div>
+        <div class="form-group">
+          <label>判定模式</label>
+          <select id="guard-mode">
+            <option value="blocklist">blocklist · 命中禁止清单才拦；同时命中领域词则豁免（默认）</option>
+            <option value="allowlist">allowlist · 仅放行允许清单（严格）</option>
+            <option value="hybrid">hybrid · 命中禁止 或 未命中允许 即拦截（最严格）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>范围描述</label>
+        <textarea id="guard-scope-desc" rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>无关项关键词 · 禁止清单（每行一个，命中即拦截）</label>
+          <textarea id="guard-blocked" rows="9"></textarea>
+        </div>
+        <div class="form-group">
+          <label>领域内关键词 · 允许清单（每行一个；allowlist / hybrid 模式用于放行，blocklist 模式用于豁免误伤）</label>
+          <textarea id="guard-allowed" rows="9"></textarea>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>拒答话术（可用 {scope} 占位）</label>
+        <textarea id="guard-refusal" rows="2"></textarea>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle" id="guard-semantic"></div>
+        <span class="toggle-label" id="guard-semantic-label">语义兜底已停用</span>
+        <span class="spacer" style="flex:1"></span>
+        <label class="note" style="display:flex;align-items:center;gap:6px">相似度阈值
+          <input type="number" id="guard-semantic-threshold" step="0.01" min="0" max="1" value="0.30"
+            style="width:84px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text)">
+        </label>
+      </div>
+      <p class="note" style="margin-bottom:12px">语义兜底：规则词表抓不到同义改写的领域外问题（如「中午吃什么好」不含"做菜"）时，用「与领域质心的向量相似度」作为第二道闸。需可用的 embedding 后端；不可用时自动跳过。</p>
+      <button class="btn" id="guard-save">保存配置</button>
+      <p class="note" style="margin-top:10px">配置持久化到 data/domain_guard.json；拦截与放行决策落盘 data/guard_log.jsonl（最多保留 500 条），供误拒 / 漏拦分析。</p>
+    </div>
+    <div class="panel">
+      <h3>试跑 · 某问题会被拦截吗</h3>
+      <div class="toolbar">
+        <input type="text" id="guard-test-q" placeholder="如：番茄炒蛋怎么做？ / vLLM 最近有什么更新？" style="flex:1">
+        <button class="btn ghost" id="guard-test-btn">试跑</button>
+      </div>
+      <div id="guard-test-result"></div>
+    </div>
+    <div class="panel">
+      <h3>决策日志（含放行，供误拒分析）</h3>
+      <div class="toolbar">
+        <label class="model-check"><input type="checkbox" id="guard-log-only-blocked"> 只看拦截</label>
+        <span class="spacer"></span>
+        <button class="btn ghost" id="guard-log-refresh">刷新</button>
+        <button class="btn danger" id="guard-log-clear">清空</button>
+      </div>
+      <div style="overflow-x:auto"><table id="guard-log-table">
+        <thead><tr><th>时间</th><th>问题</th><th>结论</th><th>原因</th><th>来源</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h3>回归用例（误拒 / 漏拦闭环）</h3>
+      <p class="note" style="margin-bottom:12px">把守卫的错误固化为用例，防止后续调整词表 / 模式 / 语义阈值时悄悄引入退化。用例文件：<span style="font-family:var(--mono)">golden/guard_cases.toml</span>；「从日志生成用例」会以日志当时的决策为期望追加草稿，需人工复核。</p>
+      <div class="toolbar">
+        <button class="btn ghost" id="guard-cases-run">运行回归</button>
+        <button class="btn ghost" id="guard-cases-sync">从日志生成用例</button>
+        <span class="spacer"></span>
+        <span class="note" id="guard-cases-summary"></span>
+      </div>
+      <div style="overflow-x:auto"><table id="guard-cases-table">
+        <thead><tr><th>问题</th><th>期望</th><th>实际</th><th>结论</th><th>原因 / 说明</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
 </main>
 
 <div id="modal-bg"><div id="modal">
@@ -167,11 +304,61 @@ td.num { font-family: var(--mono); text-align: right; }
   <div class="meta" id="modal-meta"></div>
   <pre id="modal-body"></pre>
 </div></div>
+
+<div id="provider-modal-bg" class="modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;width:min(620px,92vw);max-height:84vh;overflow:auto;padding:20px;position:relative">
+    <button style="position:absolute;top:16px;right:20px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer" onclick="closeProviderModal()">✕</button>
+    <h2 style="font-size:16px;margin-bottom:16px">模型管理</h2>
+    <div id="provider-list" style="margin-bottom:16px"></div>
+    <h3 style="font-size:13px;color:var(--dim);font-weight:600;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">添加新模型（API）</h3>
+    <div class="form-group">
+      <label>名称（唯一标识，如 gpt-4o / kimi / claude）</label>
+      <input type="text" id="new-name" placeholder="gpt-4o">
+    </div>
+    <div class="form-group">
+      <label>API 地址（base_url）</label>
+      <input type="text" id="new-base-url" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="form-group">
+      <label>模型名称</label>
+      <input type="text" id="new-model" placeholder="gpt-4o">
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="new-api-key" placeholder="sk-...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>接口类型</label>
+        <select id="new-adapter">
+          <option value="openai">OpenAI 兼容</option>
+          <option value="anthropic">Anthropic（Claude）</option>
+          <option value="ollama">Ollama 本地</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>用途</label>
+        <select id="new-kind">
+          <option value="chat">对话生成</option>
+          <option value="embedding">向量嵌入</option>
+          <option value="both">两者都支持</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" id="add-provider-btn" style="width:100%">添加模型</button>
+    <p class="note" style="margin-top:10px">运行时添加的模型仅当前会话有效，重启服务后需要重新添加。持久化配置请编辑 llm_providers.toml。</p>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ---------- 对比模式状态 ----------
+let compareMode = false;
+let chatProviders = [];
 
 // ---------- Tab 切换 ----------
 document.querySelectorAll('nav button').forEach(btn => {
@@ -183,6 +370,7 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (btn.dataset.tab === 'corpus') loadCorpus();
     if (btn.dataset.tab === 'snapshots') loadSnapshots();
     if (btn.dataset.tab === 'eval') loadEval();
+    if (btn.dataset.tab === 'guard') loadGuard();
   };
 });
 
@@ -213,9 +401,107 @@ async function loadStatus() {
     $('#status-chips').innerHTML = chips.join('');
 
     const ps = await (await fetch('/api/providers')).json();
+    chatProviders = ps.chat || [];
     $('#provider-select').innerHTML = '<option value="">默认模型</option>' +
-      ps.chat.map(p => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(p.model)}${p.local ? '（本地）' : ''}</option>`).join('');
+      chatProviders.map(p => `<option value="${esc(p.name)}">${esc(p.name)} · ${esc(p.model)}${p.local ? '（本地）' : ''}</option>`).join('');
+    renderModelCheckboxes();
   } catch (e) { console.error(e); }
+}
+
+function renderModelCheckboxes() {
+  $('#model-checkboxes').innerHTML = chatProviders.map(p => `
+    <label class="model-check">
+      <input type="checkbox" value="${esc(p.name)}" checked>
+      ${esc(p.name)} <span style="color:var(--dim);font-size:11px">${esc(p.model)}${p.local ? ' · 本地' : ''}</span>
+    </label>`).join('');
+}
+
+// ---------- 对比模式切换 ----------
+$('#compare-toggle').onclick = () => {
+  compareMode = !compareMode;
+  const tog = $('#compare-toggle');
+  const label = $('#compare-label');
+  if (compareMode) {
+    tog.classList.add('on');
+    label.classList.add('active');
+    label.textContent = '对比模式（多模型同时生成）';
+    $('#single-provider-wrap').style.display = 'none';
+    $('#compare-select-wrap').style.display = 'block';
+  } else {
+    tog.classList.remove('on');
+    label.classList.remove('active');
+    label.textContent = '单模型模式';
+    $('#single-provider-wrap').style.display = '';
+    $('#compare-select-wrap').style.display = 'none';
+  }
+};
+
+// ---------- 模型管理弹窗 ----------
+$('#manage-providers-btn').onclick = () => openProviderModal();
+
+function openProviderModal() {
+  loadProviderList();
+  $('#provider-modal-bg').style.display = 'flex';
+}
+function closeProviderModal() {
+  $('#provider-modal-bg').style.display = 'none';
+}
+$('#provider-modal-bg').onclick = e => { if (e.target.id === 'provider-modal-bg') closeProviderModal(); };
+
+async function loadProviderList() {
+  try {
+    const ps = await (await fetch('/api/providers')).json();
+    const items = (ps.all || []).map(p => `
+      <div class="provider-list-item">
+        <div>
+          <span class="pi-name">${esc(p.name)}</span>
+          <span class="pi-model">${esc(p.model)}</span>
+          ${p.runtime ? '<span class="runtime-tag">运行时</span>' : ''}
+          ${p.local ? '<span class="badge gray" style="margin-left:4px">本地</span>' : ''}
+        </div>
+        <div>
+          <span class="badge ${p.ready ? 'green' : 'red'}" style="margin-right:8px">${p.ready ? '就绪' : '未就绪'}</span>
+          ${p.runtime ? `<button class="btn danger" style="padding:3px 10px;font-size:12px" onclick="removeProvider('${esc(p.name)}')">删除</button>` : ''}
+        </div>
+      </div>`).join('');
+    $('#provider-list').innerHTML = items || '<div class="empty" style="padding:20px">暂无供应商</div>';
+  } catch (e) { toast('加载失败：' + e.message); }
+}
+
+$('#add-provider-btn').onclick = async () => {
+  const name = $('#new-name').value.trim();
+  const baseUrl = $('#new-base-url').value.trim();
+  const model = $('#new-model').value.trim();
+  const apiKey = $('#new-api-key').value.trim();
+  const adapter = $('#new-adapter').value;
+  const kind = $('#new-kind').value;
+  if (!name || !baseUrl || !model) {
+    toast('名称、API 地址、模型名称必填');
+    return;
+  }
+  try {
+    const resp = await fetch('/api/providers/add', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, base_url: baseUrl, model, api_key: apiKey || null, adapter, kind})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '添加失败');
+    toast(`已添加：${data.provider.name} · ${data.provider.model}`);
+    $('#new-name').value = ''; $('#new-base-url').value = '';
+    $('#new-model').value = ''; $('#new-api-key').value = '';
+    loadProviderList();
+    loadStatus();
+  } catch (e) { toast('添加失败：' + e.message); }
+};
+
+async function removeProvider(name) {
+  if (!confirm(`删除运行时供应商 ${name}？`)) return;
+  try {
+    await fetch('/api/providers/' + encodeURIComponent(name), {method: 'DELETE'});
+    toast('已删除：' + name);
+    loadProviderList();
+    loadStatus();
+  } catch (e) { toast('删除失败：' + e.message); }
 }
 
 // ---------- 问答 ----------
@@ -225,23 +511,62 @@ $('#ask-form').onsubmit = async e => {
   if (!q) return;
   const btn = $('#ask-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>思考中';
-  $('#ask-result').innerHTML = '<div class="panel"><span class="spinner"></span>检索中…（本地模型可能需要 1-2 分钟）</div>';
-  try {
-    const resp = await fetch('/api/ask', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({question: q, k: 5, provider: $('#provider-select').value || null})
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || '请求失败');
-    renderAnswer(q, data);
-  } catch (err) {
-    $('#ask-result').innerHTML = `<div class="panel"><span style="color: var(--red)">✗ ${esc(err.message)}</span></div>`;
-  } finally {
-    btn.disabled = false; btn.textContent = '提问';
+  if (compareMode) {
+    const checked = [...document.querySelectorAll('#model-checkboxes input:checked')].map(el => el.value);
+    if (!checked.length) {
+      toast('请至少选择一个模型');
+      btn.disabled = false; btn.textContent = '提问';
+      return;
+    }
+    $('#ask-result').innerHTML = '<div class="panel"><span class="spinner"></span>检索中…并发请求 ' + checked.length + ' 个模型</div>';
+    try {
+      const resp = await fetch('/api/ask/compare', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: q, k: 5, providers: checked})
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || '请求失败');
+      renderCompare(q, data);
+    } catch (err) {
+      $('#ask-result').innerHTML = `<div class="panel"><span style="color: var(--red)">✗ ${esc(err.message)}</span></div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '提问';
+    }
+  } else {
+    $('#ask-result').innerHTML = '<div class="panel"><span class="spinner"></span>检索中…（本地模型可能需要 1-2 分钟）</div>';
+    try {
+      const resp = await fetch('/api/ask', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: q, k: 5, provider: $('#provider-select').value || null})
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || '请求失败');
+      renderAnswer(q, data);
+    } catch (err) {
+      $('#ask-result').innerHTML = `<div class="panel"><span style="color: var(--red)">✗ ${esc(err.message)}</span></div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '提问';
+    }
   }
 };
 
+function guardBlockPanel(data, title) {
+  const g = data.guard || {};
+  const matched = (g.matched || []).length
+    ? ` · 命中 ${g.matched.map(esc).join('、')}` : '';
+  return `
+    <div class="panel" style="border-color: rgba(248,81,73,.5)">
+      <h3 style="color: var(--red)">🛡 ${esc(title)}</h3>
+      <div id="answer-box">${esc(data.answer || data.refusal || '')}</div>
+      <div id="answer-meta">领域守卫 · 策略 ${esc(g.strategy || '-')} · 范围 ${esc(g.scope || '-')}${matched}</div>
+    </div>`;
+}
+
 function renderAnswer(q, data) {
+  if (data.blocked) {
+    $('#ask-result').innerHTML = guardBlockPanel(data, '无关项拦截 · 未检索、未调用模型');
+    return;
+  }
   const answer = esc(data.answer).replace(/\[(\d+)\]/g, '<span class="cite">$1</span>');
   const hits = data.hits.map(h => `
     <div class="hit">
@@ -261,6 +586,44 @@ function renderAnswer(q, data) {
     </div>
     <div class="panel">
       <h3>引用来源（${data.hits.length} 条）</h3>
+      ${hits}
+    </div>`;
+}
+
+function renderCompare(q, data) {
+  if (data.blocked) {
+    $('#ask-result').innerHTML = guardBlockPanel(data, '无关项拦截 · 未调用任何模型');
+    return;
+  }
+  const cols = data.results.map(r => {
+    const answer = r.error
+      ? `<div class="col-error">✗ ${esc(r.error)}</div>`
+      : esc(r.answer).replace(/\[(\d+)\]/g, '<span class="cite">$1</span>') || '（空回复）';
+    return `
+      <div class="compare-col">
+        <div class="col-head">
+          <span class="col-title">${esc(r.provider)}</span>
+          <span class="col-time">${r.latency_ms}ms</span>
+        </div>
+        <div class="col-body">${answer}</div>
+      </div>`;
+  }).join('');
+  const hits = data.hits.map(h => `
+    <div class="hit">
+      <div class="hit-head">
+        <span class="hit-n">[${h.n}]</span>
+        <span class="hit-title">${esc(h.title)}</span>
+        <span class="hit-src">${esc(h.source_id)}</span>
+      </div>
+      <div class="hit-text">${esc(h.excerpt)}…</div>
+    </div>`).join('');
+  $('#ask-result').innerHTML = `
+    <div class="panel">
+      <h3>多模型对比 · ${data.results.length} 个模型 · 同一检索结果 · ${esc(data.mode)}</h3>
+      <div class="compare-cols">${cols}</div>
+    </div>
+    <div class="panel">
+      <h3>共享引用来源（${data.hits.length} 条）</h3>
       ${hits}
     </div>`;
 }
@@ -350,13 +713,16 @@ async function rollback(id) {
 async function loadEval() {
   const el = $('#eval-content');
   try {
-    const [latestResp, histResp] = await Promise.all([
-      fetch('/api/eval/latest'), fetch('/api/eval/history')
+    const [latestResp, histResp, goldenResp] = await Promise.all([
+      fetch('/api/eval/latest'), fetch('/api/eval/history'), fetch('/api/golden')
     ]);
     const data = await latestResp.json();
     const hist = await histResp.json();
+    const golden = await goldenResp.json();
+    const govPanels = renderGoldenGovernance(golden);
     if (!data.report) {
-      el.innerHTML = '<div class="panel"><div class="empty">还没有评估报告<br><span class="note">CLI 执行：eval run（--no-llm 只评估检索层）</span></div></div>';
+      el.innerHTML = '<div class="panel"><div class="empty">还没有评估报告<br><span class="note">CLI 执行：eval run（--no-llm 只评估检索层）</span></div></div>' + govPanels;
+      bindGoldenHandlers();
       return;
     }
     const r = data.report;
@@ -369,7 +735,10 @@ async function loadEval() {
         <td>${e.hit ? '<span class="badge green">✓ 命中</span>' : '<span class="badge red">✗ 未命中</span>'}</td>
         <td class="num">${e.first_hit_rank ?? '-'}</td>
         <td class="num">${(e.keyword_coverage * 100).toFixed(0)}%</td>
+        <td class="num">${e.context_evidence != null ? (e.context_evidence * 100).toFixed(0) + '%' : '-'}</td>
         <td class="num">${e.judge_score ?? '-'}</td>
+        <td class="num">${e.faithfulness ?? '-'}</td>
+        <td>${e.guard_blocked ? (e.is_negative ? '<span class="badge green">拦✓</span>' : '<span class="badge red">误拦</span>') : '<span class="badge gray">放行</span>'}</td>
         <td>${e.passed ? '<span class="badge green">通过</span>' : '<span class="badge red">未过</span>'}</td>
       </tr>`).join('');
     el.innerHTML = `
@@ -379,18 +748,21 @@ async function loadEval() {
         ${metric('通过率', r.pass_rate, (r.pass_rate*100).toFixed(0)+'%', r.pass_rate >= 0.8)}
         ${metric('引用率', r.citation_rate, (r.citation_rate*100).toFixed(0)+'%')}
         ${metric('关键词覆盖', r.keyword_coverage_avg, (r.keyword_coverage_avg*100).toFixed(0)+'%')}
+        ${metric('块级证据率', r.context_evidence_avg, r.context_evidence_avg != null ? (r.context_evidence_avg*100).toFixed(0)+'%' : '-', r.context_evidence_avg != null ? r.context_evidence_avg >= 0.5 : null)}
         ${metric('LLM 评分', r.judge_score_avg, r.judge_score_avg ? r.judge_score_avg.toFixed(2) : '-', r.judge_score_avg ? r.judge_score_avg >= 3.5 : null)}
+        ${metric('忠实度', r.faithfulness_avg, r.faithfulness_avg ? r.faithfulness_avg.toFixed(2) : '-', r.faithfulness_avg ? r.faithfulness_avg >= 3.5 : null)}
       </div>
       ${renderTrend(hist.runs || [])}
       ${renderModelCompare(hist.runs || [])}
       <div class="panel">
         <h3>逐条结果 · 快照 ${esc(r.snapshot_id)} · ${esc(r.retriever_mode)} · k=${r.k}${r.judge_model ? ' · judge ' + esc(r.judge_model) : ''}</h3>
         <table>
-          <thead><tr><th>ID</th><th>问题</th><th>检索</th><th>首位</th><th>覆盖</th><th>评分</th><th>结论</th></tr></thead>
+          <thead><tr><th>ID</th><th>问题</th><th>检索</th><th>首位</th><th>覆盖</th><th>证据</th><th>评分</th><th>忠实</th><th>守卫</th><th>结论</th></tr></thead>
           <tbody>${entries}</tbody>
         </table>
         <p class="note" style="margin-top: 12px">回归门禁：CLI 执行 eval gate 与基线对比，指标退化则以退出码 1 拦截；badcase 导出到 data/badcases/ 供人工复盘回流。</p>
-      </div>`;
+      </div>` + govPanels;
+    bindGoldenHandlers();
   } catch (e) { el.innerHTML = `<div class="panel"><div class="empty">${esc(e.message)}</div></div>`; }
 }
 
@@ -467,6 +839,272 @@ function renderModelCompare(runs) {
     <p class="note" style="margin-top: 12px">检索层指标（hit@k / MRR）只取决于索引，各模型相同；生成层指标（引用率 / LLM 评分 / 通过率）体现模型差距——这正是 CLI「eval run -p &lt;provider&gt;」切换模型做对比的意义。</p>
   </div>`;
 }
+
+// ---------- 金标集治理：体检 + badcase 导入 ----------
+function renderGoldenGovernance(golden) {
+  const a = (golden && golden.audit) || {};
+  const entriesList = (golden && golden.entries) || [];
+  const cats = Object.entries(a.by_category || {})
+    .map(([k, v]) => `<span class="badge purple" style="margin:0 4px 4px 0">${esc(k)} ${v}</span>`).join('');
+  const flagChip = (label, ids, cls) => (ids && ids.length)
+    ? `<div style="margin-bottom:6px"><span class="badge ${cls}">${esc(label)} ${ids.length}</span>
+       <span class="note" style="font-family:var(--mono)"> ${ids.map(esc).join(', ')}</span></div>`
+    : '';
+  const suggestions = (a.suggestions || []).map(s => `<li style="margin-bottom:4px">${esc(s)}</li>`).join('');
+  const errors = (a.errors || []).map(e => `<li style="margin-bottom:4px">${esc(e)}</li>`).join('');
+  const rows = entriesList.map(e => `
+    <tr>
+      <td style="font-family:var(--mono);color:var(--dim)">${esc(e.id)}</td>
+      <td>${esc(e.question)}</td>
+      <td><span class="badge purple">${esc(e.category)}</span></td>
+      <td>${e.timeliness === 'time_sensitive'
+            ? '<span class="badge" style="background:rgba(210,153,34,.15);color:var(--yellow)">时效敏感</span>'
+            : '<span class="badge gray">稳定</span>'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--dim)">${e.expected_sources.length ? esc(e.expected_sources.join(', ')) : '<span class="badge gray">负例</span>'}</td>
+    </tr>`).join('');
+  return `
+    <div class="panel">
+      <h3>金标集体检 · 数据质量治理 <span class="badge ${a.ok === false ? 'red' : 'green'}">${a.ok === false ? '存在硬错误' : '数据完整 ✓'}</span></h3>
+      <div class="metrics" style="margin-bottom:12px">
+        <div class="metric"><div class="v">${a.total ?? 0}</div><div class="l">条目总数</div></div>
+        <div class="metric"><div class="v">${a.negative ?? 0}</div><div class="l">负例（应拒答）</div></div>
+        <div class="metric ${a.time_sensitive ? 'bad' : ''}"><div class="v">${a.time_sensitive ?? 0}</div><div class="l">时效敏感</div></div>
+        <div class="metric ${a.errors && a.errors.length ? 'bad' : ''}"><div class="v">${a.errors ? a.errors.length : 0}</div><div class="l">硬错误</div></div>
+      </div>
+      <div style="margin-bottom:10px"><span class="note">评估维度分布：</span>${cats || '<span class="note">—</span>'}</div>
+      <div style="margin-bottom:10px">
+        ${flagChip('时效敏感（stale eval 风险）', a.flags && a.flags.time_sensitive, 'gray')}
+        ${flagChip('宽泛开放题（判定信号弱）', a.flags && a.flags.broad, 'gray')}
+        ${flagChip('仅依赖 arXiv 宽源', a.flags && a.flags.wide_source, 'gray')}
+        ${flagChip('近重复组（建议合并）', a.flags && a.flags.duplicate_groups, 'red')}
+      </div>
+      ${errors ? `<div class="note" style="margin-bottom:10px;color:var(--red)"><strong>硬错误（数据集损坏，需优先修复）</strong><ul style="margin:6px 0 0 18px">${errors}</ul></div>` : ''}
+      <div class="note"><strong style="color:var(--text)">治理建议</strong><ul style="margin:6px 0 0 18px">${suggestions}</ul></div>
+    </div>
+    <div class="panel">
+      <h3>badcase 导入 · 回流金标集</h3>
+      <p class="note" style="margin-bottom:10px">粘贴 JSONL（每行一个对象）或 JSON 数组。字段：<span style="font-family:var(--mono)">question / expected_sources / expected_keywords / notes / category / timeliness</span>。自动按问题文本去重、分配 gNNN 编号后追加到 golden/qa.toml。</p>
+      <div class="form-group">
+        <textarea id="badcase-content" rows="6" placeholder='{"question":"混合检索里 RRF 的 K 值取多少合适？","expected_keywords":["rrf","倒数排名融合"],"category":"concept"}'></textarea>
+      </div>
+      <div class="toolbar">
+        <label class="model-check"><input type="checkbox" id="badcase-dry-run" checked> 仅预览（dry-run，不落盘）</label>
+        <span class="spacer"></span>
+        <button class="btn ghost" id="badcase-preview">解析预览</button>
+        <button class="btn" id="badcase-import">导入金标集</button>
+      </div>
+      <div id="badcase-result"></div>
+    </div>
+    <div class="panel">
+      <h3>金标集条目（${entriesList.length}）</h3>
+      <div style="overflow:auto;max-height:440px"><table>
+        <thead><tr><th>ID</th><th>问题</th><th>维度</th><th>时效</th><th>期望来源</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function bindGoldenHandlers() {
+  const p = $('#badcase-preview'); if (p) p.onclick = () => submitBadcases(true);
+  const i = $('#badcase-import'); if (i) i.onclick = () => submitBadcases(false);
+}
+
+async function submitBadcases(dryRun) {
+  const content = $('#badcase-content').value.trim();
+  if (!content) { toast('请粘贴要导入的 JSONL 或 JSON 数组'); return; }
+  const box = $('#badcase-result');
+  box.innerHTML = '<span class="spinner"></span>处理中…';
+  try {
+    const resp = await fetch('/api/badcases/import', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content, dry_run: dryRun})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '导入失败');
+    const imported = (data.imported || [])
+      .map(e => `<span class="badge green" style="margin:0 4px 4px 0">${esc(e.id)} ${esc(e.question).slice(0, 24)}</span>`).join('');
+    const skipped = (data.skipped || []).map(s => `<li>${esc(s.question)} — ${esc(s.reason)}</li>`).join('');
+    const warnings = (data.warnings || []).map(w => `<li>${esc(w)}</li>`).join('');
+    box.innerHTML = `
+      <div class="hit" style="border-color:${(data.imported || []).length ? 'rgba(63,185,80,.4)' : 'var(--border)'}">
+        <div class="hit-head">
+          <span class="badge ${dryRun ? 'gray' : 'green'}">${dryRun ? '预览（未落盘）' : '已写入'}</span>
+          <span class="hit-src">目标 ${esc(data.target)} · 编号 ${esc(data.id_range)}</span>
+        </div>
+        ${imported ? `<div>${imported}</div>` : '<div class="note">没有可导入的条目</div>'}
+        ${warnings ? `<div class="note" style="margin-top:6px;color:var(--yellow)">⚠ 数据质量告警：<ul style="margin:4px 0 0 18px">${warnings}</ul></div>` : ''}
+        ${skipped ? `<div class="note" style="margin-top:6px">跳过 ${data.skipped.length} 条：<ul style="margin:4px 0 0 18px">${skipped}</ul></div>` : ''}
+        ${dryRun && data.preview_toml ? `<pre style="margin-top:10px;max-height:220px;overflow:auto">${esc(data.preview_toml)}</pre>` : ''}
+      </div>`;
+    if (!dryRun && (data.imported || []).length) toast(`已导入 ${data.imported.length} 条到金标集`);
+  } catch (e) { box.innerHTML = `<span style="color:var(--red)">✗ ${esc(e.message)}</span>`; }
+}
+
+// ---------- 领域守卫（无关项排除区） ----------
+let guardEnabled = true;
+let guardSemantic = false;
+
+async function loadGuard() {
+  try {
+    const data = await (await fetch('/api/guard/config')).json();
+    const c = data.config || {};
+    guardEnabled = !!c.enabled;
+    setGuardToggle(guardEnabled);
+    guardSemantic = !!c.semantic_enabled;
+    setGuardSemanticToggle(guardSemantic);
+    $('#guard-semantic-threshold').value = (c.semantic_threshold ?? 0.30);
+    $('#guard-scope-name').value = c.scope_name || '';
+    $('#guard-scope-desc').value = c.scope_description || '';
+    $('#guard-mode').value = c.mode || 'blocklist';
+    $('#guard-blocked').value = (c.blocked_topics || []).join('\n');
+    $('#guard-allowed').value = (c.allowed_topics || []).join('\n');
+    $('#guard-refusal').value = c.refusal_message || '';
+  } catch (e) { toast('加载守卫配置失败：' + e.message); }
+  loadGuardLog();
+  loadGuardCases();
+}
+
+function setGuardToggle(on) {
+  $('#guard-enabled').classList.toggle('on', on);
+  const lbl = $('#guard-enabled-label');
+  lbl.textContent = on ? '守卫已启用' : '守卫已停用（所有问题放行）';
+  lbl.classList.toggle('active', on);
+}
+
+function setGuardSemanticToggle(on) {
+  $('#guard-semantic').classList.toggle('on', on);
+  const lbl = $('#guard-semantic-label');
+  lbl.textContent = on ? '语义兜底已启用' : '语义兜底已停用';
+  lbl.classList.toggle('active', on);
+}
+
+$('#guard-enabled').onclick = () => { guardEnabled = !guardEnabled; setGuardToggle(guardEnabled); };
+$('#guard-semantic').onclick = () => { guardSemantic = !guardSemantic; setGuardSemanticToggle(guardSemantic); };
+
+function splitTopics(text) {
+  return text.split(/[\n,，、;；]+/).map(s => s.trim()).filter(Boolean);
+}
+
+$('#guard-save').onclick = async () => {
+  const body = {
+    enabled: guardEnabled,
+    scope_name: $('#guard-scope-name').value.trim(),
+    scope_description: $('#guard-scope-desc').value.trim(),
+    mode: $('#guard-mode').value,
+    blocked_topics: splitTopics($('#guard-blocked').value),
+    allowed_topics: splitTopics($('#guard-allowed').value),
+    refusal_message: $('#guard-refusal').value.trim(),
+    semantic_enabled: guardSemantic,
+    semantic_threshold: parseFloat($('#guard-semantic-threshold').value) || 0,
+  };
+  try {
+    const resp = await fetch('/api/guard/config', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '保存失败');
+    toast('守卫配置已保存');
+    loadGuard();
+  } catch (e) { toast('保存失败：' + e.message); }
+};
+
+$('#guard-test-btn').onclick = async () => {
+  const q = $('#guard-test-q').value.trim();
+  if (!q) { toast('请输入要试跑的问题'); return; }
+  const box = $('#guard-test-result');
+  box.innerHTML = '<span class="spinner"></span>判定中…';
+  try {
+    const resp = await fetch('/api/guard/check', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q, log: true})
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '试跑失败');
+    const d = data.decision || {};
+    box.innerHTML = `
+      <div class="hit" style="border-color:${d.blocked ? 'rgba(248,81,73,.5)' : 'rgba(63,185,80,.4)'}">
+        <div class="hit-head">
+          <span class="badge ${d.blocked ? 'red' : 'green'}">${d.blocked ? '拦截' : '放行'}</span>
+          <span class="hit-src">策略 ${esc(d.strategy || '-')} · 范围 ${esc(d.scope || '-')}</span>
+        </div>
+        <div class="hit-text">${d.reason ? esc(d.reason) : '问题在领域范围内，正常进入检索与生成。'}</div>
+        ${d.score != null ? `<div class="note" style="margin-top:6px">语义相似度（与领域质心）：${Number(d.score).toFixed(3)}</div>` : ''}
+        ${(d.matched || []).length ? `<div style="margin-top:6px">命中：${d.matched.map(m => `<span class="badge gray">${esc(m)}</span>`).join(' ')}</div>` : ''}
+        ${d.blocked ? `<div class="note" style="margin-top:8px">实际拦截话术：${esc(data.refusal)}</div>` : ''}
+      </div>`;
+    loadGuardLog();
+  } catch (e) { box.innerHTML = `<span style="color:var(--red)">✗ ${esc(e.message)}</span>`; }
+};
+
+async function loadGuardLog() {
+  const tbody = $('#guard-log-table tbody');
+  const onlyBlocked = $('#guard-log-only-blocked').checked;
+  tbody.innerHTML = '<tr><td colspan="5" class="empty">加载中…</td></tr>';
+  try {
+    const data = await (await fetch('/api/guard/log?limit=100&only_blocked=' + onlyBlocked)).json();
+    if (!(data.records || []).length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无记录（提问或试跑后生成）</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.records.map(r => `
+      <tr>
+        <td style="font-family:var(--mono);color:var(--dim);white-space:nowrap">${esc((r.ts || '').replace('T', ' ').slice(5, 19))}</td>
+        <td style="max-width:340px">${esc(r.question)}</td>
+        <td>${r.blocked ? '<span class="badge red">拦截</span>' : '<span class="badge green">放行</span>'}</td>
+        <td style="color:var(--dim);font-size:12px">${esc(r.reason || '—')}</td>
+        <td><span class="badge gray">${esc(r.source)}</span></td>
+      </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; }
+}
+$('#guard-log-refresh').onclick = loadGuardLog;
+$('#guard-log-only-blocked').onchange = loadGuardLog;
+
+async function loadGuardCases() {
+  const tbody = $('#guard-cases-table tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty">回归中…</td></tr>';
+  try {
+    const data = await (await fetch('/api/guard/cases')).json();
+    const r = data.report || {};
+    const summary = $('#guard-cases-summary');
+    if (!(r.outcomes || []).length) {
+      summary.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无用例（点「从日志生成用例」）</td></tr>';
+      return;
+    }
+    summary.innerHTML = `通过 ${r.passed}/${r.total} · <span style="color:${r.false_reject ? 'var(--red)' : 'var(--dim)'}">误拦 ${r.false_reject}</span> · <span style="color:${r.false_accept ? 'var(--red)' : 'var(--dim)'}">漏拦 ${r.false_accept}</span>`;
+    tbody.innerHTML = r.outcomes.map(o => {
+      const kindBadge = o.kind === 'ok'
+        ? '<span class="badge green">通过</span>'
+        : (o.kind === 'false_reject' ? '<span class="badge red">误拦</span>' : '<span class="badge red">漏拦</span>');
+      return `
+      <tr>
+        <td style="max-width:320px">${esc(o.question)}</td>
+        <td>${o.expected_blocked ? '拦截' : '放行'}</td>
+        <td>${o.actual_blocked ? '拦截' : '放行'}</td>
+        <td>${kindBadge}</td>
+        <td style="color:var(--dim);font-size:12px">${esc(o.reason || o.note || '—')}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; }
+}
+
+$('#guard-cases-run').onclick = loadGuardCases;
+$('#guard-cases-sync').onclick = async () => {
+  try {
+    const data = await (await fetch('/api/guard/cases/sync', {method: 'POST'})).json();
+    if (!data.added) toast('没有新增用例（日志为空或均已收录）');
+    else toast(`已新增 ${data.added} 条用例（共 ${data.total} 条），请人工复核 expected_blocked`);
+    loadGuardCases();
+  } catch (e) { toast('生成用例失败：' + e.message); }
+};
+$('#guard-log-clear').onclick = async () => {
+  if (!confirm('清空守卫决策日志？')) return;
+  try {
+    await fetch('/api/guard/log', {method: 'DELETE'});
+    toast('已清空');
+    loadGuardLog();
+  } catch (e) { toast('清空失败：' + e.message); }
+};
 
 loadStatus();
 </script>

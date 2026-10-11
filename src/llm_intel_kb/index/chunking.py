@@ -39,9 +39,75 @@ class Chunk:
         return "\n".join(parts)
 
 
+def flatten_markdown_tables(text: str) -> str:
+    """把 Markdown 表格转成自然语言行，避免切块时表格被切碎.
+
+    输入（表格）：
+        | 模型 | MMLU | HumanEval |
+        |------|------|-----------|
+        | GPT-4o | 88.7 | 90.2 |
+        | Qwen3 | 86.1 | 85.0 |
+
+    输出（自然语言行）：
+        表格：模型 / MMLU / HumanEval
+        GPT-4o：MMLU 88.7，HumanEval 90.2
+        Qwen3：MMLU 86.1，HumanEval 85.0
+
+    这样切块后每一行都是完整的"属性-值"对，检索时不会因为切到半张表而丢失行列对应关系。
+    """
+    lines = text.split("\n")
+    result = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # 检测表格行：以 | 开头和结尾，且不是分隔行
+        if line.strip().startswith("|") and line.strip().endswith("|"):
+            # 收集整个表格
+            table_lines = []
+            while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
+                table_lines.append(lines[i].strip())
+                i += 1
+            # 解析表格
+            rows = []
+            for tl in table_lines:
+                # 去掉首尾的 |
+                cells = [c.strip() for c in tl.strip("|").split("|")]
+                rows.append(cells)
+            if len(rows) >= 2:
+                # 检测分隔行（第二行全是 --- 或 :---: 之类）
+                is_header_sep = all(
+                    re.match(r"^[:\-\s]+$", cell) for cell in rows[1]
+                )
+                if is_header_sep:
+                    headers = rows[0]
+                    data_rows = rows[2:] if len(rows) > 2 else []
+                    # 表格标题行
+                    result.append("表格：" + " / ".join(headers))
+                    for dr in data_rows:
+                        # 每行转成 "第一列：列2 值2，列3 值3"
+                        if dr:
+                            first = dr[0] if dr else ""
+                            rest = []
+                            for j in range(1, min(len(headers), len(dr))):
+                                rest.append(f"{headers[j]} {dr[j]}")
+                            if rest:
+                                result.append(f"{first}：{'，'.join(rest)}")
+                            else:
+                                result.append(first)
+                    continue
+            # 不是标准表格（无分隔行），原样保留
+            for tl in table_lines:
+                result.append(tl)
+        else:
+            result.append(line)
+            i += 1
+    return "\n".join(result)
+
+
 def chunk_document(doc: CorpusDocument) -> list[Chunk]:
     """把一篇文档切成若干块：段落聚合 + 句子级重叠，短文成单块."""
-    paragraphs = [p for p in doc.content.split("\n\n") if p.strip()]
+    processed = flatten_markdown_tables(doc.content)
+    paragraphs = [p for p in processed.split("\n\n") if p.strip()]
     blocks: list[str] = []
     buffer: list[str] = []
     buffer_chars = 0

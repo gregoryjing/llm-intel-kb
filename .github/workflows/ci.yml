@@ -37,6 +37,9 @@ jobs:
       - name: 单元测试
         run: pytest
 
+      - name: 金标集数据完整性门禁（未注册源/空问题/重复 id）
+        run: llm-intel-kb eval audit --strict
+
   integration:
     runs-on: ubuntu-latest
     services:

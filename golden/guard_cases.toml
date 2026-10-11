@@ -1,0 +1,76 @@
+# 守卫回归用例（误拒 / 漏拦闭环）
+# 每段一条：expected_blocked = true 表示该问题应被守卫拦截，false 表示应放行。
+# `llm-intel-kb guard cases` 会逐条回归，实际结论与期望不一致即失败（CI 门禁）。
+# 期望取自金标集负例（g047~g050 / g098~g100 / g109）与领域内正例，人工确认后固化。
+
+[[case]]
+question = "今天北京天气怎么样？"
+expected_blocked = true
+note = "金标 g047：生活服务类，应拦截"
+source = "manual"
+
+[[case]]
+question = "推荐一道家常菜的做法"
+expected_blocked = true
+note = "金标 g048：烹饪领域，应拦截"
+source = "manual"
+
+[[case]]
+question = "最近有什么足球比赛？"
+expected_blocked = true
+note = "金标 g049：体育领域，应拦截"
+source = "manual"
+
+[[case]]
+question = "如何办理护照？"
+expected_blocked = true
+note = "金标 g050：政务证件，应拦截"
+source = "manual"
+
+[[case]]
+question = "怎么炒番茄炒蛋？"
+expected_blocked = true
+note = "金标 g098：烹饪领域，应拦截"
+source = "manual"
+
+[[case]]
+question = "北京到上海的高铁票多少钱？"
+expected_blocked = true
+note = "金标 g099：交通票务，应拦截"
+source = "manual"
+
+[[case]]
+question = "帮我写一封辞职信模板"
+expected_blocked = true
+note = "金标 g100：职场文书，应拦截"
+source = "manual"
+
+[[case]]
+question = "帮我做一份旅游攻略"
+expected_blocked = true
+note = "金标 g109：旅游生活服务，应拦截"
+source = "manual"
+
+[[case]]
+question = "游戏怎么上分？"
+expected_blocked = true
+note = "纯娱乐诉求，无任何领域信号，应拦截"
+source = "manual"
+
+[[case]]
+question = "vLLM 最近有哪些版本更新？重点改进了什么？"
+expected_blocked = false
+note = "领域内正例：命中 vllm，应放行"
+source = "manual"
+
+[[case]]
+question = "RAG 检索增强生成方向最近有什么新进展？"
+expected_blocked = false
+note = "领域内正例：命中 rag，应放行"
+source = "manual"
+
+[[case]]
+question = "用强化学习训练游戏智能体有哪些论文"
+expected_blocked = false
+note = "误拒防护：命中宽泛禁止词「游戏」，但同时命中领域词（智能体/论文）应豁免放行"
+source = "manual"

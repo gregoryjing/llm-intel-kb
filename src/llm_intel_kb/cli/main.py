@@ -19,6 +19,7 @@ from llm_intel_kb.checks import (
 )
 from llm_intel_kb.cli.data import data_app
 from llm_intel_kb.cli.eval_cli import eval_app
+from llm_intel_kb.cli.guard_cli import guard_app
 from llm_intel_kb.cli.index_cli import index_app
 from llm_intel_kb.config import get_settings
 from llm_intel_kb.llm import client as llm_client
@@ -33,6 +34,7 @@ app = typer.Typer(
 app.add_typer(data_app, name="data")
 app.add_typer(index_app, name="index")
 app.add_typer(eval_app, name="eval")
+app.add_typer(guard_app, name="guard")
 console = Console()
 
 _STATUS_LABELS = {
